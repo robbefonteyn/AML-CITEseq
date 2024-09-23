@@ -1,0 +1,64 @@
+---
+title: "metrics"
+author: "Katrien Quintelier"
+date: "2024-05-22"
+output: html_document
+---
+
+```{r init, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(ggplot2)
+```
+
+# Sequencing metrics
+## Get all metrics in 1 table
+### Overview data
+```{r}
+all_data <- list("CITESeq" = sprintf("KQU%03d", c(1:4, 21:24)))
+all_data
+```
+
+### Make data frames
+```{r}
+assay <- "CITESeq"
+all_metrics <- list()
+for (ID in all_data[[assay]]){
+  csv <- read.csv(paste0(assay, "/data/", ID, "/", ID, "/metrics_summary.csv"), check.names = FALSE)
+  if (is.null(all_metrics[[assay]])){
+    all_metrics[[assay]] <- matrix(NA,
+                                  nrow = length(all_data[[assay]]), ncol = ncol(csv),
+                                  dimnames = list(all_data[[assay]],
+                                                  colnames(csv)))
+  }
+  all_metrics[[assay]][ID,] <- unlist(csv)
+}
+all_metrics[[assay]] <- data.frame(all_metrics[[assay]], check.names = FALSE)
+```
+
+### Clean up data frames
+```{r}
+# CITESeq
+all_metrics$CITESeq <- data.frame(sapply(all_metrics$CITESeq, function(x) as.numeric(gsub("%", "", gsub(",", "", x)))), check.names = FALSE)
+all_metrics$CITESeq$ID <- as.factor(all_data$CITESeq)
+all_metrics$CITESeq$Day <- as.factor(rep(c("Day1","Day2"), each = 4))
+```
+
+## Figures
+```{r}
+for (assay in names(all_data)){
+  pdf(paste0("metrics_", assay, ".pdf"), width = length(all_data[[assay]])/2+2)
+  for (feature in colnames(all_metrics[[assay]])){
+    p <- ggplot(all_metrics[[assay]], aes(x=ID, y=!!sym(feature))) +
+      geom_segment(aes(xend=ID, yend=0)) +
+      geom_point( size=4, aes(color=Day)) +
+      scale_color_manual(values = c("#ff006e", "#3a86ff")) +
+      theme_minimal() +
+      xlab("")
+    print(p)
+  }
+  dev.off()
+}
+```
