@@ -11,6 +11,7 @@ knitr::opts_chunk$set(echo = TRUE, root.dir="C:/Users/Robbe Fonteyn/OneDrive - U
 
 ```{r}
 library(ggplot2)
+assay <- "CITESeq"
 ```
 
 # Sequencing metrics
@@ -92,6 +93,37 @@ colors_3_days <- c("#ff006e", "#3a86ff", "#00ff00")
 colors_2_days <- c("#ff006e", "#3a86ff")
 
 #make_plots("CITESeq", all_data, all_metrics, colors_3_days)
-make_plots("CITESeq_reseq", all_data_reseq, metrics_CITESeq_reseq, colors_2_days)
+#make_plots("CITESeq_reseq", all_data_reseq, metrics_CITESeq_reseq, colors_2_days)
 
 ```
+
+```{r}
+# Merging the two metrics objects based on common samples (ID should be the unique identifier)
+common_samples <- intersect(metrics_CITESeq[["CITESeq"]]$ID, metrics_CITESeq_reseq[["CITESeq_reseq"]]$ID)
+merged_metrics <- merge(metrics_CITESeq[["CITESeq"]][metrics_CITESeq[["CITESeq"]]$ID %in% common_samples, ], 
+                        metrics_CITESeq_reseq[["CITESeq_reseq"]][metrics_CITESeq_reseq[["CITESeq_reseq"]]$ID %in% common_samples, ], 
+                        by = "ID", suffixes = c("_shallow", "_deep"))
+
+
+# Open a PDF for the comparative plots
+pdf("comparative_metrics_CITESeq_comparison.pdf", width = length(common_samples) / 2 + 2)
+
+# Iterate through features and create comparative plots
+for (feature in colnames(metrics_CITESeq_reseq[["CITESeq_reseq"]])) {
+  p <- ggplot(merged_metrics, aes(x = ID)) +
+    geom_point(aes(y = !!sym(paste0(feature, "_shallow")), color = "Shallow"), size = 4) +
+    geom_point(aes(y = !!sym(paste0(feature, "_deep")), color = "Deep"), size = 4) +
+    geom_segment(aes(xend = ID, y = !!sym(paste0(feature, "_shallow")), 
+                     yend = !!sym(paste0(feature, "_deep"))), linetype = "dashed") +
+    scale_color_manual(values = c("Shallow" = "blue", "Deep" = "red")) +
+    theme_minimal() +
+    xlab("") +
+    ylab(feature)
+  
+  print(p)
+}
+
+dev.off()
+
+```
+
