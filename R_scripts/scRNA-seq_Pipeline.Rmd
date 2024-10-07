@@ -1,0 +1,263 @@
+---
+title: "CITE-Seq_Seurat"
+output: html_document
+date: "2024-10-03"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#CITE-Seq pipeline
+Based on https://github.com/satijalab/seurat/blob/master/vignettes/seurat5_pbmc3k_tutorial.Rmd
+##Load Libraries
+```{r message=FALSE, warning=FALSE}
+library(Seurat)
+library(scater)
+library(ggvenn)
+library(ggpubr)
+library(dplyr)
+```
+
+##Remove ambient RNA
+This is done using Cellbender, but requires the raw .h5 file to work.
+
+##Read in the data
+```{r}
+if(!file.exists("rawData.Rda")){
+  rawData <- Read10X("../Data/SAB005_reseq/raw_feature_bc_matrix")
+  names(rawData) <- c("GE","AB")
+  rawData.RNA <- as.matrix(rawData$GE)
+  rawData.AB <- as.matrix(rawData$AB)
+  save(rawData, file="rawData.Rda")
+  rm(rawData)
+} else {
+  load("rawData.Rda")
+}
+
+```
+
+```{r}
+# Chunks to split up the data to make it processable
+chunk_size_rows <- 10000  
+chunk_size_cols <- 5000
+
+# Get total number of rows (genes) and columns (cells)
+n_rows <- nrow(rawData$GE)
+n_cols <- ncol(rawData$GE)
+
+# Split the data by cells (columns)
+col_chunks <- split(1:n_cols, ceiling(seq_along(1:n_cols) / chunk_size_cols))
+
+# Empty lists to store the processed chunks
+filtered_RNA_chunks <- list()
+filtered_AB_chunks <- list()
+gene_lists <- list()  # To store genes from each chunk to avoid bind error later
+
+# Process each chunk of cells
+for (i in seq_along(col_chunks)) {
+  
+  # Now work with the smaller chunk of the matrix
+  print(paste("Processing chunk", i, "of", length(col_chunks)))
+  
+  # Subset rawData by cell chunks
+  rawData_chunk_RNA <- as.matrix(rawData$GE[, col_chunks[[i]]])  # Convert to matrix
+  rawData_chunk_AB <- as.matrix(rawData$AB[, col_chunks[[i]]])   # Convert to matrix
+
+  # Step 1: Filter out cells with less than 200 expressed genes
+  cellCounts <- apply(rawData_chunk_RNA, 2, function(x) sum(x > 0))
+  rawData_chunk_RNA <- rawData_chunk_RNA[, cellCounts >= 200]
+  rawData_chunk_AB <- rawData_chunk_AB[, cellCounts >= 200]
+  
+  # Step 2: Filter out genes expressed in fewer than 3 cells
+  geneCounts <- apply(rawData_chunk_RNA, 1, function(x) sum(x > 0))
+  rawData_chunk_RNA <- rawData_chunk_RNA[geneCounts >= 3,]
+  
+  # Step 3: Store the processed chunk and the gene list
+  filtered_RNA_chunks[[i]] <- rawData_chunk_RNA
+  filtered_AB_chunks[[i]] <- rawData_chunk_AB
+  gene_lists[[i]] <- rownames(rawData_chunk_RNA)  # Store gene names
+
+  # Garbage collection to free up memory
+  rm(rawData_chunk_RNA, rawData_chunk_AB)
+  gc()
+}
+
+# Step 4: Find common genes across all chunks
+common_genes <- Reduce(intersect, gene_lists)
+
+# Step 5: Align all chunks by the common genes and combine them
+aligned_RNA_chunks <- lapply(filtered_RNA_chunks, function(mat) mat[common_genes, ])
+filtered_RNA <- do.call(cbind, aligned_RNA_chunks)
+
+# Step 6: Simply combine AB chunks by columns (cells) without filtering by genes
+filtered_AB <- do.call(cbind, filtered_AB_chunks)
+
+# Create SingleCellExperiment object
+sce <- SingleCellExperiment(assays = list(counts = filtered_RNA))
+
+# Clean up memory
+rm(filtered_RNA_chunks, filtered_AB_chunks, gene_lists, aligned_RNA_chunks, aligned_AB_chunks)
+gc()
+
+# Check dimensions after filtering and combining
+dim(filtered_RNA)
+dim(filtered_AB)
+
+saveRDS(filtered_RNA,file="RNAclean.rds")
+saveRDS(filtered_AB, file="ABclean.rds" )
+
+```
+
+## Quality control of cells user scater
+### Identify mitochondrial transcripts
+```{r}
+is.mito <- grepl("^mt-",rownames(sce),ignore.case=TRUE)
+```
+
+### Calculate QC metrics per cell
+```{r}
+sce <- addPerCellQC(sce,subsets=list(Mt=is.mito))
+names(colData(sce))[c(2,3,6)] <- c("nUMI","nGene","mito")
+```
+
+## Detect outliers cells using scater
+### UMI counts per cell
+```{r}
+colData(sce)$nUMI.out.low <- isOutlier(colData(sce)$nUMI,nmads=3,type="lower",log=TRUE) 
+colData(sce)$nUMI.out.high <- isOutlier(colData(sce)$nUMI,nmads=3,type="higher",log=TRUE)
+sum(colData(sce)$nUMI.out.low | colData(sce)$nUMI.out.high)
+```
+
+### Number of expressed genes per cell
+```{r}
+colData(sce)$nGene.out.low <- isOutlier(colData(sce)$nGene,nmads=3,type="lower",log=TRUE) 
+colData(sce)$nGene.out.high <- isOutlier(colData(sce)$nGene,nmads=3,type="higher",log=TRUE) 
+sum(colData(sce)$nGene.out.low | colData(sce)$nGene.out.high)
+```
+
+```{r}
+colData(sce)$mito.out.high <- isOutlier(colData(sce)$mito,nmads=3,type="higher") 
+sum(colData(sce)$mito.out.high)
+```
+
+### Create histograms
+```{r}
+metaData <- as.data.frame(colData(sce))
+ggplot(metaData,aes(nUMI)) + 
+  geom_histogram(binwidth=100) + 
+  xlab("Count depth (total UMI count)") +
+  ylab("Frequency") +
+  ggtitle("Histogram of total UMI count per cell") + 
+  theme_bw()
+```
+
+
+```{r}
+cut.nGene <- 2^(median(log2(metaData$nGene))-3*mad(log2(metaData$nGene),na.rm=TRUE))
+ggplot(metaData,aes(nGene)) + 
+  geom_histogram(binwidth=20) +
+  xlab("Number of Genes") +
+  ylab("Frequency") +
+  ggtitle("Histogram of number of genes per cell") + 
+  geom_vline(xintercept=cut.nGene,color="red") +
+  theme_bw()
+```
+
+```{r}
+cut.mito <- median(metaData$mito) + 3*mad(metaData$mito,na.rm=TRUE)
+ggplot(metaData,aes(mito)) + 
+  geom_histogram(binwidth=0.1) +
+  xlab("% Mitochondrial counts") +
+  ylab("Frequency") +
+  ggtitle("Histogram of % mitogenes per cell") +
+  geom_vline(xintercept=cut.mito,color="red") +
+  theme_bw()
+```
+
+### Create violin plots 
+#### Before filtering
+```{r}
+ggplot(metaData,aes("",nUMI)) +
+  geom_jitter(height=0,width=0.3,aes(color=nUMI.out.low)) +
+   geom_violin(fill="gray80",alpha=0.5) +
+  scale_color_manual(values=c("#00BFC4","#F8766D")) + 
+  ggtitle("Total UMI counts per cell") +
+  theme_classic()
+```
+
+```{r}
+ggplot(metaData,aes("",nGene)) +
+  geom_jitter(height=0,width=0.3,aes(color=nGene.out.low)) +
+  geom_violin(fill="gray80",alpha=0.5) +
+  scale_color_manual(values=c("#00BFC4","#F8766D")) + 
+  ggtitle("Number of genes per cell") +
+  theme_classic()
+```
+
+```{r}
+ggplot(metaData,aes("",mito)) +
+  geom_jitter(height=0,width=0.3,aes(color=mito.out.high)) +
+  geom_violin(fill="gray80",alpha=0.5) +
+  scale_color_manual(values=c("#00BFC4","#F8766D")) + 
+  ggtitle("% mitogenes per cell") +
+  theme_classic()
+```
+
+#### After filtering
+```{r}
+non.out <- !(metaData$nUMI.out.low | metaData$nUMI.out.high | metaData$nGene.out.low | metaData$nGene.out.high | metaData$mito.out.high)
+metaData.filtered <- metaData[non.out,]
+dim(metaData.filtered)
+```
+
+Now recreate the plots. 
+```{r}
+ggplot(metaData.filtered,aes("",nUMI)) +
+  geom_jitter(height=0,width=0.3,aes(color=nUMI.out.low)) +
+  geom_violin(fill="gray80",alpha=0.5) +
+  scale_color_manual(values=c("#00BFC4","#F8766D")) + 
+  ggtitle("Total UMI counts per cell after filtering") +
+  theme_classic()
+```
+
+```{r}
+ggplot(metaData.filtered,aes("",nGene)) +
+  geom_jitter(height=0,width=0.3,aes(color=nGene.out.low)) +
+  geom_violin(fill="gray80",alpha=0.5) +
+  scale_color_manual(values=c("#00BFC4","#F8766D")) + 
+  ggtitle("Number of genes per cell after filtering") +
+  theme_classic()
+```
+
+```{r}
+ggplot(metaData.filtered,aes("",mito)) +
+  geom_jitter(height=0,width=0.3,aes(color=mito.out.high)) +
+  geom_violin(fill="gray80",alpha=0.5) +
+  scale_color_manual(values=c("#00BFC4","#F8766D")) + 
+  ggtitle("% mito genes per cell after filtering") +
+  theme_classic()
+```
+
+### Create Venn diagram 
+```{r}
+ggvenn(list(nGene=rownames(metaData[metaData$nGene.out.low,]),
+            mito=rownames(metaData[metaData$mito.out.high,])),
+       fill_color=c("green","orange"),show_percentage=FALSE) 
+```  
+
+### Remove outliers
+```{r}
+keep <- !(metaData$mito.out.high) 
+sce <- sce[,keep] 
+dim(sce)
+```
+
+```{r}
+rm(metaData.filtered)
+rm(metaData)
+rm(keep)
+rm(non.out)
+saveRDS(sce,file="sceUni.rds")
+```
+

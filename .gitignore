@@ -3,3 +3,8 @@ Documents
 .Rhistory
 Graphs
 .RData
+.Rproj.user
+AML-CITEseq.Rproj
+script_cursus.Rmd
+rawData.Rda
+*.rds

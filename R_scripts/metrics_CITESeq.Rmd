@@ -106,7 +106,7 @@ merged_metrics <- merge(metrics_CITESeq[["CITESeq"]][metrics_CITESeq[["CITESeq"]
 
 
 # Open a PDF for the comparative plots
-pdf("comparative_metrics_CITESeq_comparison.pdf", width = length(common_samples) / 2 + 2)
+pdf("Comparison_metrics_CITESeq.pdf", width = length(common_samples) / 2 + 2)
 
 # Iterate through features and create comparative plots
 for (feature in colnames(metrics_CITESeq_reseq[["CITESeq_reseq"]])) {
@@ -118,7 +118,8 @@ for (feature in colnames(metrics_CITESeq_reseq[["CITESeq_reseq"]])) {
     scale_color_manual(values = c("Shallow" = "blue", "Deep" = "red")) +
     theme_minimal() +
     xlab("") +
-    ylab(feature)
+    ylab(feature) +
+    ylim(0, NA)
   
   print(p)
 }
