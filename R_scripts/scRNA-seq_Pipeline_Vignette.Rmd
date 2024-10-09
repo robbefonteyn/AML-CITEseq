@@ -1,0 +1,130 @@
+---
+title: "CITE-Seq_Seurat"
+output: html_document
+date: "2024-10-03"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#CITE-Seq pipeline
+Based on https://github.com/satijalab/seurat/blob/master/vignettes/seurat5_aml3k_tutorial.Rmd
+##Load Libraries
+```{r message=FALSE, warning=FALSE}
+library(Seurat)
+library(scater)
+library(ggvenn)
+library(ggpubr)
+library(dplyr)
+```
+
+##Remove ambient RNA
+This is done using Cellbender, but requires the raw .h5 file to work.
+
+##Read in the data
+```{r}
+# Load raw data
+if(!file.exists("rawData.Rda")){
+  rawData <- Read10X("../Data/SAB005_reseq/raw_feature_bc_matrix")
+} else {
+  load("rawData.Rda")
+}
+
+# Ensure names match GE and AB
+names(rawData) <- c("GE", "AB")
+
+# Create Seurat object with GE assay
+aml <- CreateSeuratObject(counts = rawData$GE, project = "GE")
+
+# Subset AB data to match GE barcodes
+common_barcodes <- intersect(colnames(rawData$GE), colnames(rawData$AB))
+rawData$AB <- rawData$AB[, common_barcodes]
+
+# Create AB assay and add to Seurat object
+ab <- CreateAssay5Object(counts = rawData$AB)
+aml[["AB"]] <- ab
+
+aml
+```
+
+```{r}
+# Filter cells with fewer than 200 expressed genes
+aml <- subset(aml, subset = nFeature_RNA > 200)
+
+# Filter out genes expressed in fewer than 3 cells
+#aml <- aml[rowSums(aml[["RNA"]]@features > 0) >= 3, ]
+
+aml
+
+```
+
+```{r}
+aml[["percent.mt"]] <- PercentageFeatureSet(aml, pattern = "^MT-")
+```
+
+```{r}
+#Visualize QC metrics as a violin plot
+VlnPlot(aml, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3)
+
+# FeatureScatter is typically used to visualize feature-feature relationships, but can be used for anything calculated by the object, i.e. columns in object metadata, PC scores etc.
+
+plot1 <- FeatureScatter(aml, feature1 = "nCount_RNA", feature2 = "percent.mt")
+plot2 <- FeatureScatter(aml, feature1 = "nCount_RNA", feature2 = "nFeature_RNA") 
+plot1 + plot2
+
+aml <- subset(aml, subset = nFeature_RNA > 200 & nFeature_RNA < 2500 & percent.mt < 5)
+```
+
+```{r normalize, error=TRUE}
+aml <- NormalizeData(aml, normalization.method = "LogNormalize", scale.factor = 1e4)
+```
+
+
+```{r var_features, fig.height=5, fig.width=11}
+DefaultLayer(aml[["RNA"]]) <- "counts"
+aml <- FindVariableFeatures(aml, selection.method = 'vst', nfeatures = 2000)
+
+# Identify the 10 most highly variable genes
+top10 <- head(VariableFeatures(aml), 10)
+
+# plot variable features with and without labels
+plot1 <- VariableFeaturePlot(aml)
+plot2 <- LabelPoints(plot = plot1, points = top10, repel = TRUE)
+plot1 + plot2
+```
+
+```{r}
+DefaultLayer(aml[["RNA"]]) <- "data"
+all.genes <- rownames(aml)
+aml <- ScaleData(aml, features = all.genes)
+aml <- ScaleData(aml)
+aml <- ScaleData(aml, vars.to.regress = 'percent.mt')
+
+
+aml <- RunPCA(aml, features = VariableFeatures(object = aml))
+```
+
+```{r}
+print(aml[['pca']], dims = 1:5, nfeatures = 5)
+VizDimLoadings(aml, dims = 1:2, reduction = 'pca')
+DimPlot(aml, reduction = 'pca')
+```
+
+```{r}
+DimHeatmap(aml, dims = 1:15, cells = 500, balanced = TRUE)
+```
+
+```{r}
+aml <- FindNeighbors(aml, dims = 1:10)
+aml <- FindClusters(aml, resolution = 0.5)
+
+# Look at cluster IDs of the first 5 cells
+head(Idents(aml), 5)
+aml <- RunUMAP(aml, dims = 1:10)
+```
+
+```{r}
+DimPlot(aml, reduction = 'umap')
+```
+
