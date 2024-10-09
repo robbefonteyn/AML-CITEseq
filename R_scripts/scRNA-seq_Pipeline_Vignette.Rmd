@@ -125,6 +125,11 @@ aml <- RunUMAP(aml, dims = 1:10)
 ```
 
 ```{r}
-DimPlot(aml, reduction = 'umap')
+DimPlot(aml, reduction = 'umap', features)
+```
+```{r}
+features <- gsub("\\..*", "", rownames(aml[["AB"]]))
+FeaturePlot(aml, features = "CD34", reduction = "umap")
+
 ```
 
