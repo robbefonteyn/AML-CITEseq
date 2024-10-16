@@ -47,7 +47,7 @@ rawData$AB <- rawData$AB[, common_barcodes]
 
 # Create AB assay and add to Seurat object
 ab <- CreateAssay5Object(counts = rawData$AB)
-aml[["AB"]] <- ab
+aml[["ADT"]] <- ab
 
 aml
 ```
@@ -76,6 +76,8 @@ aml[["percent.mt"]] <- PercentageFeatureSet(aml, pattern = "^MT-")
 # Visualize QC metrics as a violin plot
 VlnPlot(aml, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3)
 
+VlnPlot(aml, features = c("nFeature_ADT", "nCount_ADT","nCount_RNA"), ncol = 3)
+
 # FeatureScatter is typically used to visualize feature-feature relationships, but can be used for anything calculated by the object, i.e., columns in object metadata, PC scores, etc.
 plot1 <- FeatureScatter(aml, feature1 = "nCount_RNA", feature2 = "percent.mt")
 plot2 <- FeatureScatter(aml, feature1 = "nCount_RNA", feature2 = "nFeature_RNA") 
@@ -97,7 +99,7 @@ DefaultLayer(aml[["RNA"]]) <- "counts"
 aml <- FindVariableFeatures(aml, selection.method = 'vst', nfeatures = 2000)
 
 # Identify the 10 most highly variable genes
-top10 <- head(VariableFeatures(aml), 10)
+top10 <- head(VariableFeatures(aml), 50)
 
 # Plot variable features with and without labels
 plot1 <- VariableFeaturePlot(aml)
@@ -111,8 +113,9 @@ plot1 + plot2
 DefaultLayer(aml[["RNA"]]) <- "data"
 all.genes <- rownames(aml)
 aml <- ScaleData(aml, features = all.genes)
-aml <- ScaleData(aml)
+
 aml <- ScaleData(aml, vars.to.regress = 'percent.mt')
+aml <- ScaleData(aml)
 
 aml <- RunPCA(aml, features = VariableFeatures(object = aml))
 ```
@@ -154,4 +157,17 @@ FeaturePlot(aml, features = "CD34", reduction = "umap")
 ```{r}
 DimPlot(aml, reduction = 'pca')
 ```
+
+## Doublet detection and cell type labeling
+
+```{r}
+
+```
+
+
+# ADT-data preprocessing
+```{r}
+
+```
+
 

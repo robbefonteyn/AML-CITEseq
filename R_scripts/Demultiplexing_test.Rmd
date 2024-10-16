@@ -1,0 +1,99 @@
+## Basic setup
+
+Load packages
+
+```{r load_pacakges}
+library(Seurat)
+options(Seurat.object.assay.version = "v5")
+library(hdf5r)
+```
+
+## Read in data
+```{r read_Data}
+getwd()
+data <- Read10X_h5("../Data/SAB019_reseq/raw_feature_bc_matrix.h5")
+obj <- CreateSeuratObject(counts = data$`Gene Expression`, min.cells = 3, min.features = 100)
+```
+
+
+## Normalize and Scale data
+```{r}
+# Normalize RNA data with log normalization
+obj <- NormalizeData(obj)
+# Find and scale variable features
+obj <- FindVariableFeatures(obj, selection.method = 'mean.var.plot')
+obj <- ScaleData(obj, features = VariableFeatures(obj))
+```
+
+
+## Create assays from antibody and HTO data
+```{r}
+obj[["ADT"]] <- CreateAssayObject(counts = data$`Antibody Capture`[!grepl("Hashtag", rownames(data$`Antibody Capture`)), colnames(obj)])
+obj[["HTO"]] <- CreateAssayObject(counts = data$`Antibody Capture`[grepl("Hashtag", rownames(data$`Antibody Capture`)), colnames(obj)])
+obj <- NormalizeData(obj, assay = 'HTO', normalization.method = 'CLR')
+```
+
+
+## Demultiplex cells based on HTO enrichment
+```{r}
+obj <- HTODemux(obj, assay = "HTO", positive.quantile = 0.99)
+
+table(obj$HTO_classification.global)
+```
+
+
+## Visualization
+```{r}
+Idents(obj) <- 'HTO_maxID'
+RidgePlot(obj, assay = 'HTO', features = rownames(obj[['HTO']])[1:2], ncol = 2)
+FeatureScatter(obj, feature1 = 'Hashtag3', feature2 = 'Hashtag4')
+
+Idents(obj) <- 'HTO_classification.global'
+VlnPlot(obj, features = 'nCount_RNA', pt.size = 0.1, log = TRUE)
+```
+
+## Generate a two dimensional tSNE embedding for HTOs. Here we are grouping cells by singlets and doublets for simplicity
+```{r}
+#First, we will remove negative cells from the object
+obj.subset <- subset(obj, idents = 'Negative', invert = TRUE)
+
+# Calculate a tSNE embedding of the HTO data
+DefaultAssay(obj.subset) <- "HTO"
+obj.subset <- ScaleData(obj.subset, features = rownames(obj.subset), verbose = FALSE)
+obj.subset <- RunPCA(obj.subset, features = rownames(obj.subset), approx = FALSE)
+# Check Duplicates!!!
+obj.subset <- RunTSNE(obj.subset, dims = 1:8, perplexity = 100, check_duplicates = FALSE)
+DimPlot(obj.subset)
+```
+
+
+```{r}
+HTOHeatmap(obj, assay = 'HTO', ncells = 5000)
+```
+
+
+```{r}
+# Extract the singlets
+obj.singlet <- subset(obj, idents = 'Singlet')
+
+# Select the top 1000 most variable features
+obj.singlet <- FindVariableFeatures(obj.singlet, selection.method = 'mean.var.plot')
+
+# Scaling RNA data, we only scale the variable features here for efficiency
+obj.singlet <- ScaleData(obj.singlet, features = VariableFeatures(obj.singlet))
+
+# Run PCA
+obj.singlet <- RunPCA(obj.singlet, features = VariableFeatures(obj.singlet))
+
+# We select the top 10 PCs for clustering and tSNE based on PCElbowPlot
+obj.singlet <- FindNeighbors(obj.singlet, reduction = 'pca', dims = 1:10)
+obj.singlet <- FindClusters(obj.singlet, resolution = 0.6, verbose = FALSE)
+obj.singlet <- RunTSNE(obj.singlet, reduction = 'pca', dims = 1:10)
+
+# Projecting singlet identities on TSNE visualization
+DimPlot(obj.singlet, group.by = "HTO_classification")
+```
+
+
+
+
