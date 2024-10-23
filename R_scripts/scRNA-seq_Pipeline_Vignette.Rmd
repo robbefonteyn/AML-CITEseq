@@ -20,49 +20,28 @@ library(scater)
 library(ggvenn)
 library(ggpubr)
 library(dplyr)
+library(hdf5r)
 ```
 
 ## Remove Ambient RNA
 
 This is done using Cellbender, but requires the raw `.h5` file to work.
 
-## Read in the Data
+## Read in the Data and Filter Cells and Genes
 
 ```{r}
-# Load raw data
-if(!file.exists("rawData.Rda")){
-  rawData <- Read10X("../Data/SAB005_reseq/raw_feature_bc_matrix")
-} else {
-  load("rawData.Rda")
-}
-
-names(rawData) <- c("GE", "AB")
-
-# Create Seurat object with GE assay
-aml <- CreateSeuratObject(counts = rawData$GE, project = "GE")
-
-# Subset AB data to match GE barcodes
-common_barcodes <- intersect(colnames(rawData$GE), colnames(rawData$AB))
-rawData$AB <- rawData$AB[, common_barcodes]
-
-# Create AB assay and add to Seurat object
-ab <- CreateAssay5Object(counts = rawData$AB)
-aml[["ADT"]] <- ab
-
-aml
+getwd()
+data <- Read10X_h5("../Data/SAB005_reseq/raw_feature_bc_matrix.h5")
+aml <- CreateSeuratObject(counts = data$`Gene Expression`, min.cells = 3, min.features = 100)
+aml[["ADT"]] <- CreateAssayObject(counts = data$`Antibody Capture`[!grepl("Hashtag", rownames(data$`Antibody Capture`)), colnames(aml)])
+#aml[["HTO"]] <- CreateAssayObject(counts = data$`Antibody Capture`[grepl("Hashtag", rownames(data$`Antibody Capture`)), colnames(aml)])
+#aml <- NormalizeData(aml, assay = 'ADT', normalization.method = 'CLR')
+DefaultAssay(aml) <- 'ADT'
+aml <- NormalizeData(aml)
+DefaultAssay(aml) <- 'RNA'
+aml <- NormalizeData(aml)
 ```
 
-## Filter Cells and Genes
-
-```{r}
-# Filter cells with fewer than 200 expressed genes
-aml <- subset(aml, subset = nFeature_RNA > 200)
-
-# Filter out genes expressed in fewer than 3 cells
-# aml <- aml[rowSums(aml[["RNA"]]@features > 0) >= 3, ]
-
-aml
-```
 
 ## Calculate Mitochondrial Percentage
 
@@ -74,9 +53,9 @@ aml[["percent.mt"]] <- PercentageFeatureSet(aml, pattern = "^MT-")
 
 ```{r}
 # Visualize QC metrics as a violin plot
-VlnPlot(aml, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3)
+VlnPlot(aml, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3, pt.size = FALSE, alpha = 0.5)
 
-VlnPlot(aml, features = c("nFeature_ADT", "nCount_ADT","nCount_RNA"), ncol = 3)
+VlnPlot(aml, features = c("nFeature_ADT", "nCount_ADT","nCount_RNA"), ncol = 3, pt.size = FALSE, alpha = 0.5)
 
 # FeatureScatter is typically used to visualize feature-feature relationships, but can be used for anything calculated by the object, i.e., columns in object metadata, PC scores, etc.
 plot1 <- FeatureScatter(aml, feature1 = "nCount_RNA", feature2 = "percent.mt")
@@ -146,17 +125,56 @@ aml <- RunUMAP(aml, dims = 1:10)
 ## Visualize UMAP and Feature Plot
 
 ```{r}
-DimPlot(aml, reduction = 'umap')
+DimPlot(aml, reduction = 'umap', label = TRUE)
 ```
 
 ```{r}
-features <- gsub("\\..*", "", rownames(aml[["AB"]]))
+features <- gsub("\\..*", "", rownames(aml[["ADT"]]))
 FeaturePlot(aml, features = "CD34", reduction = "umap")
 ```
 
 ```{r}
-DimPlot(aml, reduction = 'pca')
+DimPlot(aml, reduction = 'pca', label = TRUE)
 ```
+
+```{r}
+p1 <- FeaturePlot(aml, "CD19", cols = c("lightgrey", "darkgreen")) + ggtitle("CD19 protein")
+DefaultAssay(aml) <- "RNA"
+p2 <- FeaturePlot(aml, "CD19") + ggtitle("CD19 RNA")
+p1 | p2
+```
+
+## Find Marker Genes for both RNA and ADT
+```{r}
+adt_markers <- FindMarkers(aml, ident.1 = 0, assay = "ADT")
+rna_markers <- FindMarkers(aml, ident.1 = 0, assay = "RNA")
+head(adt_markers)
+# isolate only the markers that have a adjusted p value < 0.05
+sum(adt_markers$p_val_adj < 0.05)
+sum(rna_markers$p_val_adj < 0.05)
+rna_markers[rna_markers$p_val_adj < 0.05, ]
+```
+
+```{r}
+VlnPlot(aml, "CD19")
+RidgePlot(aml, features = c("adt_CD11c", "adt_CD8", "adt_CD16", "CD34"), ncol = 2)
+```
+
+
+## Test for celltype annotation
+```{r}
+bmmc.ref <- readRDS("../Data/BMMC_ref2.Rds")
+```
+
+```{r}
+# Use FindTransferAnchors to transfer information from the reference to the query
+DefaultAssay(aml) <- "RNA"
+DefaultAssay(bmmc.ref) <- "refAssay"
+anchors <- FindTransferAnchors(reference = bmmc.ref, query = aml, reference.reduction = "pca", normalization.method = "SCT", dims = 1:10)
+
+```
+
+
 
 ## Doublet detection and cell type labeling
 
