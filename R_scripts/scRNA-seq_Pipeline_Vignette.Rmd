@@ -40,6 +40,7 @@ DefaultAssay(aml) <- 'ADT'
 aml <- NormalizeData(aml)
 DefaultAssay(aml) <- 'RNA'
 aml <- NormalizeData(aml)
+rm(data)
 ```
 
 
@@ -84,6 +85,8 @@ top10 <- head(VariableFeatures(aml), 50)
 plot1 <- VariableFeaturePlot(aml)
 plot2 <- LabelPoints(plot = plot1, points = top10, repel = TRUE)
 plot1 + plot2
+# Delete the plots to save on memory
+rm(plot1, plot2)
 ```
 
 ## Scale Data and Perform PCA
