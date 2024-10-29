@@ -1,0 +1,83 @@
+---
+title: "Integration_ADT_RNA"
+author: "Robbe Fonteyn"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(Seurat)
+library(cowplot)
+library(dplyr)
+```
+
+## Load in Data
+```{r}
+filename <- "Data/Processed_SCC/PROCESSED/SAB001/SAB001_reseq/SAB001_reseq_seurat.rds"
+data <- readRDS(filename)
+```
+
+## Dimensionality Reduction
+```{r}
+DefaultAssay(data) <- 'RNA'
+data <- NormalizeData(data) %>% FindVariableFeatures() %>% ScaleData() %>% RunPCA()
+
+DefaultAssay(data) <- 'ADT'
+# we will use all ADT features for dimensional reduction
+# we set a dimensional reduction name to avoid overwriting the 
+VariableFeatures(data) <- rownames(data[["ADT"]])
+data <- NormalizeData(data, normalization.method = 'CLR', margin = 2) %>% 
+  ScaleData() %>% RunPCA(reduction.name = 'apca')
+```
+
+## Closest multimodal Neighbours
+```{r}
+data <- FindMultiModalNeighbors(
+  data, reduction.list = list("pca","apca"), 
+  dims.list = list(1:30, 1:18), modality.weight.name = "RNA.weight")
+```
+
+## Downstream Analysis
+```{r}
+data <- RunUMAP(data, nn.name = "weighted.nn", reduction.name = "wnn.umap", reduction.key = "wnnUMAP_")
+data <- FindClusters(data, graph.name = "wsnn", algorithm = 3, resolution = 2, verbose = FALSE)
+```
+
+```{r}
+p1 <- DimPlot(data, reduction = 'wnn.umap',group.by = "ADT_clusters", label = TRUE, repel = TRUE, label.size = 2.5) + NoLegend()
+p1
+```
+
+```{r}
+data <- RunUMAP(data, reduction = 'pca', dims = 1:30, assay = 'RNA', 
+              reduction.name = 'rna.umap', reduction.key = 'rnaUMAP_')
+data <- RunUMAP(data, reduction = 'apca', dims = 1:18, assay = 'ADT', 
+              reduction.name = 'adt.umap', reduction.key = 'adtUMAP_')
+```
+
+```{r}
+p3 <- DimPlot(data, reduction = 'rna.umap', group.by = 'RNA_clusters', label = TRUE, 
+              repel = TRUE, label.size = 2.5) + NoLegend()
+p4 <- DimPlot(data, reduction = 'adt.umap', group.by = 'ADT_clusters', label = TRUE, 
+              repel = TRUE, label.size = 2.5) + NoLegend()
+p3 + p4
+```
+
+```{r}
+ VlnPlot(data, features = "RNA.weight", group.by = 'RNA_clusters', sort = TRUE, pt.size = 0.1) +
+  NoLegend()
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
