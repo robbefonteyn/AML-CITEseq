@@ -1,0 +1,138 @@
+---
+title: "Annotation_Azimuth"
+author: "Robbe Fonteyn"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+# Installation of Azimuth if needed
+```{r}
+#packages <- c("Rhtslib", "GenomicAlignments", "Rsamtools", "rtracklayer", "GenomicFeatures", "CNEr", "BSgenome", "ensembldb", "TFBSTools", "EnsDb.Hsapiens.v86", "BSgenome.Hsapiens.UCSC.hg38")
+
+#for (package in packages){
+    #if (!requireNamespace(package, quietly = TRUE)) {BiocManager::install(package, update = FALSE)}}
+
+#if (!requireNamespace('remotes', quietly = TRUE)) {install.packages('remotes')}
+#remotes::install_github('satijalab/azimuth', ref = 'master')
+```
+
+# Load libraries
+```{r}
+knitr::opts_chunk$set(echo = TRUE)
+library(Seurat)
+library(Azimuth)
+library(SeuratData)
+library(patchwork)
+```
+
+```{r}
+getwd()
+filename1 <- "../Data/Processed_SCC/PROCESSED/SAB001/SAB001_reseq/SAB001_reseq_Hashtag5_cluster_ADT_seurat.rds"
+data1 <- readRDS(filename1)
+filename2 <- "../Data/Processed_SCC/PROCESSED/SAB002/SAB002_reseq/SAB002_reseq_seurat.rds"
+data2 <- readRDS(filename2)
+
+filename3 <- "../Data/Processed_SCC/PROCESSED/SAB003/SAB003_reseq/SAB003_reseq_seurat.rds"
+
+CD34_AML0028 <- merge(data1, y= data2, add.cell.ids = c("SAB001", "SAB002"))
+LD_AML0028 <- readRDS(filename3)
+AML0028 <- merge(CD34_AML0028, y= LD_AML0028, add.cell.ids = c("CD34", "LD"))
+```
+
+```{r}
+CD34_AML0028 <- RunAzimuth(CD34_AML0028, reference="bonemarrowref")
+LD_AML0028 <- RunAzimuth(LD_AML0028, reference="bonemarrowref")
+AML0028 <- RunAzimuth(AML0028, reference="bonemarrowref")
+```
+
+```{r}
+AML0028 <- readRDS("C:/Users/Robbe Fonteyn/OneDrive - UGent/AJ 2024-2025/Master's_Dissertation/AML-CITEseq/Data/Processed_SCC/Annotated_seurat_objects/AML0028.rds")
+CD34_AML0028 <- readRDS("C:/Users/Robbe Fonteyn/OneDrive - UGent/AJ 2024-2025/Master's_Dissertation/AML-CITEseq/Data/Processed_SCC/Annotated_seurat_objects/CD34_AML0028.rds")
+LD_AML0028 <- readRDS("C:/Users/Robbe Fonteyn/OneDrive - UGent/AJ 2024-2025/Master's_Dissertation/AML-CITEseq/Data/Processed_SCC/Annotated_seurat_objects/LD_AML0028.rds")
+```
+
+
+```{r}
+library(ggplot2)
+p1 <- DimPlot(CD34_AML0028, group.by = "predicted.celltype.l2", label = TRUE, label.size = 4, pt.size= 2) 
+dev.new(width=5, height=4, unit="in")
+p2 <- DimPlot(CD34_AML0028, group.by = "predicted.celltype.l1", label = TRUE, label.size = 3, pt.size= 2) + ggtitle("CD34_AML0028, predicted.celltype.l1")
+
+p1
+p2
+```
+
+```{r}
+p1 <- DimPlot(LD_AML0028, group.by = "predicted.celltype.l2", label = TRUE, label.size = 4, pt.size= 2) + ggtitle("LD_AML0028, predicted.celltype.l2")
+dev.new(width=5, height=4, unit="in")
+p2 <- DimPlot(LD_AML0028, group.by = "predicted.celltype.l1", label = TRUE, label.size = 3, pt.size= 2) + ggtitle("LD_AML0028, predicted.celltype.l1")
+
+p1
+p2
+```
+
+```{r}
+p1 <- DimPlot(AML0028, group.by = "predicted.celltype.l2", label = TRUE, label.size = 4, pt.size= 2) + ggtitle("Full AML0028, predicted.celltype.l2")
+# Increase the size of the plot
+dev.new(width=5, height=4, unit="in")
+p2 <- DimPlot(AML0028, group.by = "predicted.celltype.l1", label = TRUE, label.size = 3, pt.size= 2) + ggtitle("Full AML0028, predicted.celltype.l2")
+
+p1
+p2
+```
+
+
+```{r}
+CD34_AML0028 <- NormalizeData(CD34_AML0028)
+Idents(CD34_AML0028) <- "predicted.celltype.l2"
+
+p1 <- FeaturePlot(CD34_AML0028, features = "CCR7")
+p2 <- FeaturePlot(CD34_AML0028, features = "FCGR3A")
+p3 <- VlnPlot(CD34_AML0028, features = "AXL", group.by = "predicted.celltype.l2", idents = c("ASDC",
+    "pDC", "cDC1", "cDC2"))
+
+p1 + p2 + p3 + plot_layout(ncol = 2)
+```
+
+```{r}
+LD_AML0028 <- NormalizeData(LD_AML0028)
+Idents(LD_AML0028) <- "predicted.celltype.l2"
+
+p1 <- FeaturePlot(LD_AML0028, features = "CCR7")
+p2 <- FeaturePlot(LD_AML0028, features = "FCGR3A")
+p3 <- VlnPlot(LD_AML0028, features = "AXL", group.by = "predicted.celltype.l2", idents = c("ASDC",
+    "pDC", "cDC1", "cDC2"))
+
+p1 + p2 + p3 + plot_layout(ncol = 2)
+```
+
+```{r}
+AML0028 <- NormalizeData(AML0028)
+Idents(AML0028) <- "predicted.celltype.l2"
+
+p1 <- FeaturePlot(AML0028, features = "CCR7")
+p2 <- FeaturePlot(AML0028, features = "FCGR3A")
+p3 <- VlnPlot(AML0028, features = "AXL", group.by = "predicted.celltype.l2", idents = c("ASDC",
+    "pDC", "cDC1", "cDC2"))
+
+p1 + p2 + p3 + plot_layout(ncol = 2)
+```
+
+
+```{r}
+# Save seurat objects
+saveRDS(CD34_AML0028, "../Data/Processed_SCC/Annotated_seurat_objects/CD34_AML0028.rds")
+saveRDS(LD_AML0028, "../Data/Processed_SCC/Annotated_seurat_objects/LD_AML0028.rds")
+saveRDS(AML0028, "../Data/Processed_SCC/Annotated_seurat_objects/AML0028.rds")
+```
+
+## Get Triana et al. Healthy reference data
+```{r}
+Healthy_ref_triana <- readRDS("C:/Users/Robbe Fonteyn/OneDrive - UGent/AJ 2024-2025/Master's_Dissertation/AML-CITEseq/Data/Processed_SCC/Annotated_seurat_objects/Healthy_ref_triana.rds")
+```
+
+```{r}
+Triana_ref_LD_AML0028<- RunAzimuth(LD_AML0028, reference=Healthy_ref_triana)
+```
+
+

@@ -14,7 +14,7 @@ library(dplyr)
 
 ## Load in Data
 ```{r}
-filename <- "Data/Processed_SCC/PROCESSED/SAB001/SAB001_reseq/SAB001_reseq_seurat.rds"
+filename <- "../Data/Processed_SCC/PROCESSED/SAB001/SAB001_reseq/SAB001_reseq_seurat.rds"
 data <- readRDS(filename)
 ```
 
@@ -45,8 +45,11 @@ data <- FindClusters(data, graph.name = "wsnn", algorithm = 3, resolution = 2, v
 ```
 
 ```{r}
-p1 <- DimPlot(data, reduction = 'wnn.umap',group.by = "ADT_clusters", label = TRUE, repel = TRUE, label.size = 2.5) + NoLegend()
+p1 <- DimPlot(data, reduction = 'RNA_pca',group.by = "RNA_clusters", label = TRUE, repel = TRUE, label.size = 5) + NoLegend()
+p2 <- DimPlot(data, reduction = 'wnn.umap',group.by = "ADT_clusters", label = TRUE, repel = TRUE, label.size = 5) + NoLegend()
+
 p1
+p2
 ```
 
 ```{r}
