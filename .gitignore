@@ -8,3 +8,5 @@ AML-CITEseq.Rproj
 script_cursus.Rmd
 rawData.Rda
 *.rds
+
+.idea
