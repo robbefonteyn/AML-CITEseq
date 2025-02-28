@@ -1,0 +1,24 @@
+---
+title: "Untitled"
+author: "Robbe Fonteyn"
+date: "2025-02-24"
+output: html_document
+---
+
+```{r, warning=FALSE, message=FALSE}}
+library(Seurat)
+library(dplyr)
+library(ggplot2)
+```
+
+```{r}
+# Load the data
+SAB <- readRDS("C:/Users/fonte/OneDrive - UGent/AJ 2024-2025/Master's_Dissertation/AML-CITEseq/Data/SAB_Full.rds")
+new_meta <- read.csv2("C:/Users/fonte/OneDrive - UGent/AJ 2024-2025/Master's_Dissertation/AML-CITEseq/Data/Final_full_metadata.csv", header= TRUE, sep = ",", row.names = 1)
+```
+
+```{r}
+# Add metadata to the Seurat object
+SAB@meta.data <- new_meta
+```
+
