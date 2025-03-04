@@ -10,3 +10,7 @@ rawData.Rda
 *.rds
 
 .idea
+*.jpeg
+*.png
+*.jpg
+*.pdf

@@ -11,26 +11,21 @@ library(Seurat)
 
 ```{r}
 # Plot of the merged object
-path <- "C:/Users/Robbe Fonteyn/OneDrive - UGent/AJ 2024-2025/Master's_Dissertation/AML-CITEseq/Data/SAB_Full.rds"
+path <- "/kyukon/home/gent/458/vsc45888/data/Master_dissertation/Processed_SCC/Merge_test/SAB_Full.rds"
 merged_SAB <- readRDS(path)
 ```
 
 ```{r}
 merged_SAB <- FindVariableFeatures(merged_SAB, selection.method = "vst", nfeatures = 2000)
 ```
+
 ```{r}
 merged_SAB <- ScaleData(merged_SAB, features = rownames(merged_SAB))
 ```
 
 ```{r}
 SAB_meta_data <- merged_SAB@meta.data
-SAB_meta_data
 ```
-
-```{r}
-colnames(SAB_meta_data)
-```
-
 
 ```{r}
 library(dplyr)
@@ -165,6 +160,4 @@ VariableFeaturePlot(merged_SAB)
 top_features <- head(VariableFeatures(merged_SAB), 10)  # Select top 10
 LabelPoints(VariableFeaturePlot(merged_SAB), points = top_features, repel = TRUE)
 ```
-
-
 
