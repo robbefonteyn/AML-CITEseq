@@ -1,4 +1,4 @@
-DE <- read.csv("DE_Survival_CD34_yes_vs_no_wilcox_limma.csv", header = TRUE, sep = ",", row.names = 1)
+DE <- read.csv("DE_Genetics_MutatedNPM1_vs_Others_wilcox_limma.csv", header = TRUE, sep = ",", row.names = 1)
 
 # Move rownames into a column called "gene"
 DE$gene <- rownames(DE)
@@ -20,5 +20,5 @@ ggplot(DE, aes(x = p_val_adj)) +
   theme_minimal() +
   xlab("Adjusted p-value") +
   ylab("Count") +
-  ggtitle(paste0("Distribution of adj P values 2 year survival\nSignificant genes (padj < 0.05): ", n_signif))
+  ggtitle(paste0("Distribution of adj P values mutated NPM1\nSignificant genes (padj < 0.05): ", n_signif))
 
