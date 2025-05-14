@@ -1,0 +1,183 @@
+
+```{r}
+library(Seurat)
+library(scater)
+library(ggvenn)
+library(ggpubr)
+library(dplyr)
+```
+
+
+```{r}
+# Load in small test object
+message("Loading Seurat object")
+#path <- "/kyukon/home/gent/458/vsc45888/data/Master_dissertation/Processed_SCC/Merge_test/SAB_Full_with_Triana.rds"
+path <- "C:/Users/Robbe Fonteyn/OneDrive - UGent/AJ 2024-2025/Master's_Dissertation/AML-CITEseq/Data/Processed_SCC/PROCESSED/SAB002_reseq_seurat.rds"
+SAB <- readRDS(path)
+
+SAB_slim <- DietSeurat(SAB, layers = c("counts", "data"), assays = c("RNA","HTO", "ADT"))
+#saveRDS(SAB_slim, "/kyukon/home/gent/458/vsc45888/data/Master_dissertation/Processed_SCC/Merge_test/SAB_Full_slim.rds")
+
+DefaultAssay(SAB_slim) <- "RNA"
+SAB_slim <- NormalizeData(SAB_slim)
+```
+
+```{r}
+SAB_slim@assays$RNA@counts[1:5,1:10]
+```
+
+Normalized counts are in the data slot
+```{r}
+SAB_slim@assays$RNA@data[1:5,1:10]
+```
+
+**Histogram of raw library sizes**
+```{r}
+ggplot(SAB_slim@meta.data, aes(nCount_RNA)) + geom_histogram(bins=60)
+```
+
+**Histogram of normalized library sizes**  
+
+To this end retrieve the normalized counts from the data slot. They are stored in a matrix. For plotting you need to transform the matrix in a data frame. 
+```{r}
+counts.norm <- as.matrix(SAB_slim@assays$RNA@data)
+nCount_RNALN <- data.frame(nCount_RNA=colSums(counts.norm))
+ggplot(nCount_RNALN,aes(nCount_RNA)) + geom_histogram(bins=60)
+
+```  
+
+```{r}
+SAB_slim <- FindVariableFeatures(SAB_slim)
+length(VariableFeatures(SAB_slim)) 
+head(VariableFeatures(SAB_slim)) 
+```
+
+
+```{r}
+head(HVFInfo(SAB_slim))
+```  
+
+HVGs are selected based on the last column: genes with the highest value in this column are selected as HVGs.  
+
+**Plot variable genes**  
+
+To create the plot that was shown in the slides use VariableFeaturePlot()
+```{r}
+VariableFeaturePlot(SAB_slim)
+```
+
+```{r}
+SAB_slim <- ScaleData(SAB_slim)
+```
+
+Scaled values are in the scale.data slot of the RNA object
+```{r}
+SAB_slim@assays$RNA@scale.data[1:5,1:4]
+```
+
+```{r}
+SAB_slim <- RunPCA(SAB_slim,nfeatures.print=10)
+```
+Results are stored in the pca object of the reductions slot.  
+
+Cell embeddings are the values obtained by projecting each cell on a PC. They define the coordinates of the cell in the PCA plot.  
+
+Feature loadings are the contributions of each gene to the PC. High (or very negative) loadings define marker genes.  
+
+Plots of the PCs can be made using DimPlot()  
+Arguments of this function:
+
+- *object* Seurat object, input are the dimensionality reduction results
+- *reduction* use results of which dimensionality reduction: UMAP, tSNE or PCA?
+- *group.by* how to color the cells (the dots on the plot)?
+- *split.by* create multiple plots e.g. one for KO and one for WT. The value is the name of the column in the meta data that defines the groups.
+- *dims* which PCs to plot? default is PC_1 versus PC_2
+- *label*: default do not put cluster labels on the plot
+- *label.size*: font size of cluster labels
+- *pt.size*: size of the points
+```{r}
+SAB_slim@reductions$pca@cell.embeddings[1:5,1:5]
+SAB_slim@reductions$pca@feature.loadings[1:5,1:5]
+DimPlot(SAB_slim,reduction="pca", group.by="subsample")
+```
+
+## 14. Heat maps of the PCs
+Create a heatmap for PCs 1-36: one heatmap per PC  
+The counts of the genes determine the color on the heat map
+
+Arguments for the DimHeatmap() function: 
+
+- *dims*: which PCs to plot 
+- *cells*: how many cells to plot 
+- *balanced*: plot equal number of genes with highest and lowest weights?
+- *fast=FALSE*: nicer and customizable plot with ggplot2 but much slower to make
+```{r}
+DimHeatmap(SAB_slim,dims=1:12,cells=500,balanced=TRUE)
+```
+
+The more PCs you plot the less clear the plots become: you start seeing noise.
+```{r}
+DimHeatmap(SAB_slim,dims=13:24,cells=500,balanced=TRUE)
+DimHeatmap(SAB_slim,dims=25:36,cells=500,balanced=TRUE)
+```
+
+```{r}
+ElbowPlot(SAB_slim,ndims=50)
+```
+
+```{r}
+SAB_slim <- FindNeighbors(SAB_slim,dims=1:30)
+```
+
+```{r}
+head(SAB_slim@meta.data) 
+```
+
+```{r}
+SAB_slim <- RunTSNE(SAB_slim,dims=1:30,
+                     check_duplicates=FALSE)
+```
+
+
+```{r}
+DimPlot(SAB_slim, reduction="tsne",label=TRUE,label.size=8,pt.size=2) + NoLegend()
+```
+
+```{r}
+DimPlot(SAB_slim,reduction="tsne", pt.size=2)
+```
+
+```{r}
+SAB_slim <- RunUMAP(SAB_slim,dims=1:30,n.neighbors=20)
+```
+
+Visualize UMAP plot, colored by sample to check for batch effects
+```{r}
+DimPlot(SAB_slim)
+```
+
+```{r}
+DimPlot(object=SAB_slim,label=TRUE,label.size=8) + NoLegend() + ggplot2::ggtitle(label="UMAP_on_PCA")
+```
+
+```{r}
+Idents(SAB_slim) <- SAB_slim@meta.data$RNA_snn_res.0.8
+table(SAB_slim@active.ident)
+```
+
+Plot the clustering  
+
+```{r}
+p6 <- DimPlot(SAB_slim,label=TRUE) + NoLegend() + NoAxes()
+p7 <- DimPlot(SAB_slim, group.by = "Phase") + NoAxes()
+ggarrange(p6,p7)
+```
+
+
+
+
+
+
+
+
+

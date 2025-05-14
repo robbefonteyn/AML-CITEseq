@@ -13,7 +13,7 @@ library(ggrepel)
 ```
 
 ```{r}
-setwd("C:/Users/Robbe Fonteyn/OneDrive - UGent/AJ 2024-2025/Master's_Dissertation/Results/Differential_expression/NPM1vsOthers")
+setwd("C:/Users/fonte/OneDrive - UGent/AJ 2024-2025/Master's_Dissertation/Results/Differential_expression/NPM1vsOthers")
 # Read in data
 markers_disease <- read.csv("DE_Genetics_MutatedNPM1_vs_Others_wilcox_limma.csv", header = TRUE, sep = ",")
 #rename column X to gene
@@ -54,13 +54,14 @@ ggsave("VolcanoPlot_MutatedNPM1_vs_Others_top50_genes.png", width = 8, height = 
 
 ```{r}
 # Gene set enrichment analysis
-#install.packages("BiocManager")
-#BiocManager::install(c("clusterProfiler", "org.Hs.eg.db", "enrichplot"))
+install.packages("BiocManager")
+BiocManager::install(c("clusterProfiler", "org.Hs.eg.db", "enrichplot"))
 ```
 
 ```{r}
 library(clusterProfiler)
 library(org.Hs.eg.db)
+library(dplyr)
 
 # Drop NAs and rank genes
 gene_list <- markers_disease %>%
@@ -99,7 +100,7 @@ gsea_results <- gseGO(
   ont = "BP",
   minGSSize = 10,
   maxGSSize = 500,
-  pvalueCutoff = 0.05,
+  pvalueCutoff = 0.01,
   verbose = TRUE,
   eps= 0
 )

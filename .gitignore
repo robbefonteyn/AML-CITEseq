@@ -15,3 +15,6 @@ rawData.Rda
 *.jpg
 *.pdf
 *.csv
+*.h5ad
+*.h5Seurat
+*.pkl
