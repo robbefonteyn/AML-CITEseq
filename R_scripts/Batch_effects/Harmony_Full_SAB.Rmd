@@ -1,0 +1,227 @@
+```{r}
+#install.packages("harmony")
+```
+
+
+```{r}
+library(harmony)
+library(Seurat)
+library(dplyr)
+library(cowplot)
+```
+
+```{r}
+# Load the SAB
+setwd("C:/Users/Robbe Fonteyn/OneDrive - UGent/AJ 2024-2025/Master's_Dissertation/AML-CITEseq/Data")
+SAB <- readRDS("SAB_slimmed_final.rds")
+```
+
+```{r}
+# Run Harmony
+SAB <- RunHarmony(SAB, group.by.vars = c("Patient", "day", "Sorting"), plot_convergence = TRUE)
+```
+
+```{r}
+# Run Clustering
+SAB <- SAB %>%
+    FindNeighbors(reduction = "harmony") %>% # Defaults to 20 k nearest neighbors
+    FindClusters(resolution = 0.8) 
+
+```
+
+```{r}
+SAB <- SAB %>%
+    RunUMAP(reduction = "harmony",  dims = 1:30, reduction.name = "Harmony_UMAP")
+```
+
+```{r}
+library(ggplot2)
+p1 <- DimPlot(SAB, reduction = "Harmony_UMAP", group.by = "predicted.celltype.l2", raster = FALSE) + NoLegend()
+p2 <- DimPlot(SAB, reduction = "Harmony_UMAP", group.by = "RNA_snn_res.0.8",label = TRUE, raster = FALSE) + NoLegend()
+plot_grid(p1, p2)
+```
+```{r}
+p1 <- DimPlot(SAB, reduction = "Harmony_UMAP", group.by = "predicted.celltype.l2", raster = FALSE, label = TRUE) + NoLegend()
+p2 <- DimPlot(SAB, reduction = "Harmony_UMAP", group.by = "Triana_celltype", label = TRUE, raster = FALSE) + NoLegend()
+plot_grid(p1, p2)
+```
+
+```{r}
+p1
+```
+
+```{r}
+p2
+```
+
+```{r}
+DimPlot(SAB, reduction = "Harmony_UMAP", group.by = "RNA_snn_res.0.8",label =TRUE, raster = FALSE) + NoLegend()
+```
+
+```{r}
+DimPlot(SAB, reduction = "Harmony_UMAP", group.by = "Azimuth_cluster_majority_celltype", label = TRUE, raster = FALSE) + NoLegend()
+```
+
+
+```{r}
+DimPlot(SAB, reduction = "Harmony_UMAP", group.by = "Triana_cluster_majority_celltype", label = TRUE, raster = FALSE) + NoLegend()
+```
+
+```{r}
+output_dir <- "C:/Users/Robbe Fonteyn/OneDrive - UGent/AJ 2024-2025/Master's_Dissertation/Graphs/Merge_plots"
+```
+
+
+# Barplots
+```{r}
+library(Seurat)
+library(dplyr)
+library(ggplot2)
+
+# Extract metadata
+metadata <- SAB@meta.data
+
+# Specify Seurat cluster column
+cluster_col <- "RNA_snn_res.0.8"  # Adjust if needed
+
+# Summarize counts of predicted cell types per cluster
+cluster_celltype_counts <- metadata %>%
+  group_by(Cluster = .data[[cluster_col]], Patient) %>%
+  summarise(CellCount = n(), .groups = "drop")
+
+# Sort clusters numerically
+cluster_celltype_counts <- cluster_celltype_counts %>%
+  mutate(Cluster = factor(Cluster, levels = sort(as.numeric(unique(as.character(Cluster))))))
+
+# Create plot with black bar outlines and compact legend
+plot <- ggplot(cluster_celltype_counts, aes(x = Cluster, y = CellCount, fill = Patient)) +
+  geom_bar(stat = "identity", color = "black", size = 0.05) +
+  labs(
+    title = "Distribution of patients Across Seurat Clusters",
+    x = "Seurat Cluster",
+    y = "Number of Cells",
+    fill = "Patient") +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    legend.position = "right",
+    legend.text = element_text(size = 5),              # Smaller legend text
+    legend.title = element_text(size = 6),             # Smaller legend title
+    legend.key.size = unit(0.2, "cm")                  # Smaller color boxes
+  ) +
+  guides(fill = guide_legend(ncol = 1))                # Single-column legend
+
+# Save the plot
+ggsave(
+  filename = file.path(output_dir, "Patients_per_SeuratCluster_Full_SAB_Harmony.jpg"),
+  plot = plot,
+  width = 8,
+  height = 6,
+  dpi = 300
+)
+```
+
+```{r}
+library(Seurat)
+library(dplyr)
+library(ggplot2)
+
+# Extract metadata
+#metadata <- SAB@meta.data
+
+# Specify Seurat cluster column
+cluster_col <- "RNA_snn_res.0.8"  # Adjust if needed
+
+# Summarize counts of predicted cell types per cluster
+cluster_celltype_counts <- metadata %>%
+  group_by(Cluster = .data[[cluster_col]], predicted.celltype.l2) %>%
+  summarise(CellCount = n(), .groups = "drop")
+
+# Sort clusters numerically
+cluster_celltype_counts <- cluster_celltype_counts %>%
+  mutate(Cluster = factor(Cluster, levels = sort(as.numeric(unique(as.character(Cluster))))))
+
+# Create plot with black bar outlines and compact legend
+plot <- ggplot(cluster_celltype_counts, aes(x = Cluster, y = CellCount, fill = predicted.celltype.l2)) +
+  geom_bar(stat = "identity", color = "black", size = 0.05) +
+  labs(
+    title = "Distribution of Azimuth Cell Types Across Seurat Clusters",
+    x = "Seurat Cluster",
+    y = "Number of Cells",
+    fill = "Azimuth Cell Type") +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    legend.position = "right",
+    legend.text = element_text(size = 5),              # Smaller legend text
+    legend.title = element_text(size = 6),             # Smaller legend title
+    legend.key.size = unit(0.2, "cm")                  # Smaller color boxes
+  ) +
+  guides(fill = guide_legend(ncol = 1))                # Single-column legend
+
+# Save the plot
+ggsave(
+  filename = file.path(output_dir, "Azimuth_Celltypes_per_SeuratCluster_Full_SAB_Harmony.jpg"),
+  plot = plot,
+  width = 8,
+  height = 6,
+  dpi = 300
+)
+
+```
+
+```{r}
+library(Seurat)
+library(dplyr)
+library(ggplot2)
+
+# Extract metadata
+#metadata <- SAB@meta.data
+
+# Specify Seurat cluster column
+cluster_col <- "RNA_snn_res.0.8"  # Adjust if needed
+
+# Summarize counts of predicted cell types per cluster
+cluster_celltype_counts <- metadata %>%
+  group_by(Cluster = .data[[cluster_col]], Triana_celltype) %>%
+  summarise(CellCount = n(), .groups = "drop")
+
+# Sort clusters numerically
+cluster_celltype_counts <- cluster_celltype_counts %>%
+  mutate(Cluster = factor(Cluster, levels = sort(as.numeric(unique(as.character(Cluster))))))
+
+# Create plot with black bar outlines and compact legend
+plot <- ggplot(cluster_celltype_counts, aes(x = Cluster, y = CellCount, fill = Triana_celltype)) +
+  geom_bar(stat = "identity", color = "black", size = 0.05) +
+  labs(
+    title = "Distribution of Triana Cell Types Across Seurat Clusters",
+    x = "Seurat Cluster",
+    y = "Number of Cells",
+    fill = "Triana Cell Type") +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    legend.position = "right",
+    legend.text = element_text(size = 5),              # Smaller legend text
+    legend.title = element_text(size = 6),             # Smaller legend title
+    legend.key.size = unit(0.2, "cm")                  # Smaller color boxes
+  ) +
+  guides(fill = guide_legend(ncol = 1))                # Single-column legend
+
+# Save the plot
+ggsave(
+  filename = file.path(output_dir, "Triana_Celltypes_per_SeuratCluster_Full_SAB_Harmony.jpg"),
+  plot = plot,
+  width = 8,
+  height = 6,
+  dpi = 300
+)
+
+```
+
+```{r}
+#Save the Seurat object with Harmony embeddings
+setwd("C:/Users/Robbe Fonteyn/OneDrive - UGent/AJ 2024-2025/Master's_Dissertation/AML-CITEseq/Data")
+saveRDS(SAB, file = "SAB_slimmed_final_Harmony.rds")
+```
+
