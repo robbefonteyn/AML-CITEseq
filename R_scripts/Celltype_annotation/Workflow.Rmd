@@ -22,14 +22,6 @@ require(parallel)
 require(randomForest)
 ```
 
-```{r}
-if (!requireNamespace("BiocManager", quietly = TRUE))
-    install.packages("BiocManager")
-
-#BiocManager::install("scmap")
-library(scmap)
-```
-
 ## Goals
 
 Goals of this notebook are
@@ -41,10 +33,9 @@ Goals of this notebook are
 
 ## Preparation of data
 
-First, you need a Seurat object containing a well annotated reference of cell states encountered in blood and bone marrow. We recommend ours :-)
+First, you need a Seurat object containign a well annotated reference of cell states encountered in blood and bone marrow. We recommend ours :-)
 
 ```{r loadReference}
-options(timeout = 300)
 Healthy <- readRDS(url("https://ndownloader.figshare.com/files/28408638")) #in case this link breaks, see https://doi.org/10.6084/m9.figshare.13397651.v3
 ```
 
@@ -58,30 +49,27 @@ If you want to run this vignette to reproduce the results from our manuscript 1:
 reproduce <- FALSE
 ```
 
-Loading my own data
-```{r}
-setwd("C:/Users/Robbe Fonteyn/OneDrive - UGent/AJ 2024-2025/Master's_Dissertation/AML-CITEseq/Data/Processed_SCC/PROCESSED/SAB001/SAB001_reseq")
-merged <- readRDS("SAB001_reseq_seurat.rds")
-```
-
-```{r}
-# Assign patient ID to 'Batch'
-merged$Batch <- merged$Patient
-
-# Create 'status' column based on patient ID prefix
-merged$status <- ifelse(grepl("^HC", merged$Patient), "healthy", "diseased")
-```
-
 
 ```{r loadQuery}
-normalized_counts <- GetAssayData(merged, assay = "RNA", slot = "data")
-counts <- GetAssayData(merged, assay = "RNA", slot = "counts")
+AMLs <- readRDS(url("https://ndownloader.figshare.com/files/28403676")) #If the link breaks, see https://doi.org/10.6084/m9.figshare.14780127.v1
+
+#replace this line by a command that loads your seurart object. To make sure you use the same normalization that we use , run Seurat normalization. In this case, the antibody counts are CLR normalizaed and the RNA counts were Log Normalized.
+#The object needs to have a metadata column Batch that encodes sample identity
+ if (!reproduce) {
+   merged <- merge(Healthy, y = AMLs, add.cell.ids = c("reference", "query"), project = "abAML")
+ } else {
+   merged <- AMLs
+ }
+#by
+
+normalized_counts <- GetAssayData(merged, assay = "BOTH", slot="data")
+counts <- GetAssayData(merged, assay = "BOTH", slot="counts") 
 
 #replace this line by a command that loads you patient-level meta data. metadata.tsv file is contained in this git directory.
 #(row names should correspond to the Batch IDs used in the cell-level meta data, and there should be a column called Status that determines if the individuals are "healthy" or "diseased")
-#patient.metadata <- read.table(url("git.embl.de/triana/nrn/-/raw/master/Projection_Vignette/metadata.tsv"), sep="\t",header=T,row.names=1)
+patient.metadata <- read.table(url("git.embl.de/triana/nrn/-/raw/master/Projection_Vignette/metadata.tsv"), sep="\t",header=T,row.names=1)
 
-#merged$status <- patient.metadata[as.character(merged$Batch),"Status"]
+merged$status <- patient.metadata[as.character(merged$Batch),"Status"]
 ```
 
 
@@ -109,10 +97,10 @@ rowData(sce_All)$feature_symbol <- rownames(sce_All)
 # remove features with duplicated names
 sce_All <- sce_All[!duplicated(rownames(sce_All)), ]
 
-sce_Culture<- setFeatures(sce_Culture,features =  rownames(sce_Culture))
+sce_Culture<-setFeatures(sce_Culture,features =  rownames(sce_Culture))
 sce_Culture <- indexCell(sce_Culture)
 
-sce_All<- setFeatures(sce_All,features =  rownames(sce_All))
+sce_All<-setFeatures(sce_All,features =  rownames(sce_All))
 sce_All <- indexCell(sce_All)
 
 
