@@ -40,11 +40,11 @@ gc()
 
 ```{r}
 sample_id <- "Patient"
-group_id = "DiseaseStatus"
-celltype_id = "Triana_cluster_majority_celltype"
+group_id = "Survival_two_years"
+celltype_id = "Azimuth_cluster_majority_celltype_l2"
 
-contrasts_oi = c("'AML-nonAML','nonAML-AML'")
-contrast_tbl = tibble(contrast = c("AML-nonAML", "nonAML-AML"), group = c("AML", "nonAML"))
+contrasts_oi = c("'no-yes','yes-no'")
+contrast_tbl = tibble(contrast = c("no-yes", "yes-no"), group = c("no", "yes"))
 
 min_cells = 10
 fraction_cutoff = 0.05
@@ -73,6 +73,16 @@ if(!is.na(batches)){
   colnames(grouping_tbl) = c("sample","group")
 }
 ```
+
+```{r}
+# === Filter out cells with missing sample_id, group_id, or celltype_id
+SAB.sce <- SAB.sce[
+  , !is.na(SummarizedExperiment::colData(SAB.sce)[[sample_id]]) &
+    !is.na(SummarizedExperiment::colData(SAB.sce)[[group_id]]) &
+    !is.na(SummarizedExperiment::colData(SAB.sce)[[celltype_id]])
+]
+```
+
 
 ```{r}
 abundance_info = get_abundance_info(
@@ -445,14 +455,14 @@ library(readr)
 clusters <- unique(DE_info$celltype_de$de_output_tidy$cluster_id)
 
 # Output directory
-out_dir <- "C:/Users/Robbe Fonteyn/OneDrive - UGent/AJ 2024-2025/Master's_Dissertation/Results/DE_AMLvsnonAML_nichenet_Triana_cluster_majority_celltype_harmony"
+out_dir <- "C:/Users/Robbe Fonteyn/OneDrive - UGent/AJ 2024-2025/Master's_Dissertation/Results/DE_yes vs_no_nichenet_Azimuth_cluster_majority_celltype_l2_harmony"
 dir.create(out_dir, showWarnings = FALSE)
 
 # Loop over clusters
 walk(clusters, function(cl) {
   # Subset DE results for this cluster
   df <- DE_info$celltype_de$de_output_tidy %>%
-    filter(cluster_id == cl, contrast == "AML-nonAML")
+    filter(cluster_id == cl, contrast == "yes-no")
 
   # Upregulated
   up_df <- df %>%
@@ -482,7 +492,7 @@ library(tidyverse)
 library(ggrepel)
 
 # Set working directory
-setwd("C:/Users/Robbe Fonteyn/OneDrive - UGent/AJ 2024-2025/Master's_Dissertation/Results/DE_AMLvsnonAML_nichenet_Triana_cluster_majority_celltype_harmony")
+setwd("C:/Users/Robbe Fonteyn/OneDrive - UGent/AJ 2024-2025/Master's_Dissertation/Results/DE_yes vs_no_nichenet_Azimuth_cluster_majority_celltype_l2_harmony")
 
 # List all CSV files
 all_files <- list.files(pattern = "*.csv")
@@ -557,7 +567,7 @@ library(tidyverse)
 library(ggpubr)
 
 # Set working directory
-setwd("C:/Users/Robbe Fonteyn/OneDrive - UGent/AJ 2024-2025/Master's_Dissertation/Results/DE_AMLvsnonAML_nichenet_Triana_cluster_majority_celltype_harmony")
+setwd("C:/Users/Robbe Fonteyn/OneDrive - UGent/AJ 2024-2025/Master's_Dissertation/Results/DE_yes vs_no_nichenet_Azimuth_cluster_majority_celltype_l2_harmony")
 
 all_files <- list.files(pattern = "*.csv")
 celltypes <- unique(gsub("DE_(upregulated|downregulated)_|\\.csv", "", all_files))
