@@ -1,0 +1,974 @@
+
+```{r}
+# Load required libraries
+library(Seurat)
+library(dplyr)
+library(ggplot2)
+library(ggpubr)
+library(Signac)
+
+```
+
+```{r}
+# Set working directory and load Seurat object
+setwd("./Data")  # Update to your project-relative path
+SAB <- readRDS("SAB.rds")
+```
+
+```{r}
+# Assign cluster majority cell type based on Triana annotation
+cluster_col <- "seurat_clusters"
+celltype_col <- "Triana_celltype"
+
+SAB@meta.data[[cluster_col]] <- as.factor(SAB@meta.data[[cluster_col]])
+SAB@meta.data[[celltype_col]] <- as.factor(SAB@meta.data[[celltype_col]])
+
+cluster_majority <- SAB@meta.data %>%
+  group_by(cluster = .data[[cluster_col]]) %>%
+  count(celltype = .data[[celltype_col]]) %>%
+  slice_max(n, n = 1, with_ties = FALSE) %>%
+  ungroup()
+
+lookup <- setNames(cluster_majority$celltype, cluster_majority$cluster)
+SAB@meta.data$Triana_cluster_majority_celltype <- lookup[as.character(SAB@meta.data[[cluster_col]])]
+```
+
+```{r}
+# Assign Azimuth predicted cell type based on majority in each cluster
+celltype_col <- "predicted.celltype.l1"
+SAB@meta.data[[celltype_col]] <- as.factor(SAB@meta.data[[celltype_col]])
+
+cluster_majority <- SAB@meta.data %>%
+  group_by(cluster = .data[[cluster_col]]) %>%
+  count(celltype = .data[[celltype_col]]) %>%
+  slice_max(n, n = 1, with_ties = FALSE) %>%
+  ungroup()
+
+lookup <- setNames(cluster_majority$celltype, cluster_majority$cluster)
+SAB@meta.data$Azimuth_cluster_majority_celltype_l1 <- lookup[as.character(SAB@meta.data[[cluster_col]])]
+```
+
+```{r}
+# Save the updated object
+saveRDS(SAB, "SAB.rds")
+```
+
+# Layer 1 Azimuth
+```{r}
+# Create UMAP colored by Azimuth prediction
+umap_plot <- DimPlot(
+  SAB,
+  reduction = "RNA_harmony_umap",
+  group.by = "Azimuth_cluster_majority_celltype_l1",
+  label = TRUE,
+  raster = FALSE
+) + ggtitle("Azimuth Predicted Cell Types") +
+  theme(plot.title = element_text(hjust = 0.5))
+
+ggsave("Azimuth_l1_majority_full_merged_UMAP_harmony.jpg", plot = umap_plot, width = 8, height = 6, dpi = 300)
+```
+
+# Generate UMAPS
+```{r}
+# Generate UMAP plots for multiple metadata columns
+to_make <- c("RNA_harmony_clusters", "exp", "Patient", "Genetics", "survival_info",
+             "Triana_cluster_majority_celltype", "day", "Relapse",
+             "Azimuth_cluster_majority_celltype_l1", "Azimuth_cluster_majority_celltype_l2",
+             "ELN", "Triana_celltype")
+
+for (group in to_make) {
+  p <- DimPlot(SAB, reduction = "RNA_harmony_umap", group.by = group, label = TRUE, raster = FALSE) +
+    NoLegend() +
+    ggtitle(paste(group, "Harmony UMAP")) +
+    theme(plot.title = element_text(hjust = 0.5))
+  
+  ggsave(filename = paste0("UMAP_", group, ".jpg"), plot = p, width = 8, height = 6, dpi = 300)
+}
+```
+
+# Sequencing Depth correlation
+```{r}
+# Plot correlation with sequencing depth
+DepthCor(SAB, reduction = "pca")
+```
+
+# Patients apart and ggarrange
+```{r}
+# Highlight individual patients in UMAP
+unique_patients <- unique(SAB@meta.data$Patient)
+
+for (patient in unique_patients) {
+  patient_cells <- rownames(SAB@meta.data[SAB@meta.data$Patient == patient, ])
+  p <- DimPlot(SAB, reduction = "RNA_harmony_umap", cells.highlight = patient_cells,
+               cols.highlight = "orange", cols = "lightgray", raster = FALSE) +
+    ggtitle(paste("Patient", patient)) + NoLegend()
+  ggsave(filename = paste0("UMAP_Patient_", gsub(" ", "_", patient), ".jpeg"), plot = p, width = 8, height = 6, dpi = 300)
+}
+```
+
+# ggarrange for patients
+```{r}
+# Get and sort patients: HC patients first, then rest alphabetically
+all_patients <- unique(SAB@meta.data$Patient)
+hc_patients <- sort(all_patients[grepl("^HC", all_patients)])           # e.g., HC1, HC2
+aml_patients <- sort(all_patients[!grepl("^HC", all_patients)])         # non-HC patients
+sorted_patients <- c(hc_patients, aml_patients)
+
+# Create and store plots in a list
+patient_umap_list <- list()
+
+for (patient in sorted_patients) {
+  message(paste("Creating UMAP for patient:", patient))
+  
+  patient_cells <- rownames(SAB@meta.data[SAB@meta.data$Patient == patient, ])
+  
+  p <- DimPlot(SAB, reduction = "RNA_harmony_umap",
+               cells.highlight = patient_cells,
+               cols.highlight = "orange",
+               cols = "lightgray",
+               raster = FALSE) +
+    ggtitle(paste("Patient:", patient)) +
+    NoLegend()
+  
+  patient_umap_list[[patient]] <- p
+}
+
+# Arrange plots using ggarrange
+combined_plot <- ggarrange(plotlist = patient_umap_list,
+                           ncol = 3,
+                           nrow = ceiling(length(patient_umap_list) / 3))
+```
+
+```{r}
+# Save as high-resolution JPEG  
+ggsave(paste0(output_dir, "/All_Patients_UMAP_sorted.jpeg"), plot = combined_plot, width = 10, height = 18, dpi = 300, units = "in")
+```
+
+# ggarrange for celltypes Azimuth
+```{r}
+# Ensure UMAP was computed under RNA assay
+DefaultAssay(SAB) <- "RNA"
+
+# Get all unique cell types (assuming Seurat object has a cell type annotation column)
+all_celltypes <- sort(unique(na.omit(SAB@meta.data$predicted.celltype.l2)))
+
+# Initialize list
+celltype_umap_list <- list()
+
+# Generate a UMAP for each cell type
+for (celltype in all_celltypes) {
+  message("Creating UMAP for cell type: ", celltype)
+
+  cells <- rownames(SAB@meta.data)[SAB@meta.data$predicted.celltype.l2 == celltype]
+
+  p <- DimPlot(
+    SAB,
+    reduction = "RNA_harmony_umap",
+    cells.highlight = list(cells),
+    cols.highlight = "purple",
+    cols = "lightgray",
+    raster = FALSE
+  ) +
+    ggtitle(paste("Cell type:", celltype)) +
+    theme(plot.title = element_text(size = 10)) +
+    NoLegend()
+
+  # Store with safe name
+  safe_name <- gsub("[^A-Za-z0-9_]", "_", celltype)
+  celltype_umap_list[[safe_name]] <- p
+}
+
+library(Seurat)
+library(ggplot2)
+library(ggpubr)
+
+plots_per_page <- 15
+plots_per_row <- 3
+plots_per_col <- 5
+total_pages <- ceiling(length(celltype_umap_list) / plots_per_page)
+
+for (i in seq_len(total_pages)) {
+  start_idx <- (i - 1) * plots_per_page + 1
+  end_idx <- min(i * plots_per_page, length(celltype_umap_list))
+  plot_subset_names <- names(celltype_umap_list)[start_idx:end_idx]
+  
+  plot_subset <- lapply(plot_subset_names, function(name) {
+    celltype_umap_list[[name]] +
+      theme(plot.title = element_text(size = 10)) +
+      NoLegend()
+  })
+  
+  # Pad with empty plots if needed
+  num_missing <- plots_per_page - length(plot_subset)
+  if (num_missing > 0) {
+    empty_plot <- ggplot() + theme_void()
+    plot_subset <- c(plot_subset, rep(list(empty_plot), num_missing))
+  }
+
+  combined_plot <- ggarrange(plotlist = plot_subset,
+                             ncol = plots_per_row,
+                             nrow = plots_per_col,
+                             align = "none")
+
+  # Save to A4 size (portrait): 8.27 x 11.69 inches
+  filename <- paste0(output_dir, "/UMAP_Celltypes_Page_", i, "_Azimuth_Harmony.jpeg")
+  ggsave(filename,
+         plot = combined_plot,
+         width = 8.27,
+         height = 11.69,
+         dpi = 300,
+         units = "in")
+}
+```
+
+# Triana celltype ggarrange
+```{r}
+# Ensure UMAP was computed under RNA assay
+DefaultAssay(SAB) <- "RNA"
+
+# Get all unique cell types (assuming Seurat object has a cell type annotation column)
+all_celltypes <- sort(unique(na.omit(SAB@meta.data$Triana_celltype)))
+
+# Initialize list
+celltype_umap_list <- list()
+
+# Mapping of long cell type names to short names
+short_names <- list(
+  "Plasmacytoid dendritic cell progenitors" = "pDC progenitors",
+  "CD69+PD-1+ memory CD4+ T cells" = "CD69⁺PD-1⁺ CD4 Tmem",
+  "CD8+CD103+ tissue resident memory T cells" = "CD8⁺CD103⁺ Trm",
+  "Eosinophil-basophil-mast cell progenitors" = "Eo/Ba/Ma progenitors"
+)
+
+for (celltype in all_celltypes) {
+  message("Creating UMAP for cell type: ", celltype)
+
+  # Use short name if it exists in the mapping
+  display_name <- if (celltype %in% names(short_names)) short_names[[celltype]] else celltype
+
+  cells <- rownames(SAB@meta.data)[SAB@meta.data$Triana_celltype == celltype]
+
+  p <- DimPlot(
+    SAB,
+    reduction = "RNA_harmony_umap",
+    cells.highlight = list(cells),
+    cols.highlight = "purple",
+    cols = "lightgray",
+    raster = FALSE
+  ) +
+    ggtitle(display_name) +
+    theme(plot.title = element_text(size = 10)) +
+    NoLegend()
+
+  # Store with safe name
+  safe_name <- gsub("[^A-Za-z0-9_]", "_", display_name)
+  celltype_umap_list[[safe_name]] <- p
+}
+
+plots_per_page <- 15
+plots_per_row <- 3
+plots_per_col <- 5
+total_pages <- ceiling(length(celltype_umap_list) / plots_per_page)
+
+for (i in seq_len(total_pages)) {
+  start_idx <- (i - 1) * plots_per_page + 1
+  end_idx <- min(i * plots_per_page, length(celltype_umap_list))
+  plot_subset_names <- names(celltype_umap_list)[start_idx:end_idx]
+  
+  plot_subset <- lapply(plot_subset_names, function(name) {
+    celltype_umap_list[[name]] +
+      theme(plot.title = element_text(size = 10)) +
+      NoLegend()
+  })
+  
+  # Pad with empty plots if needed
+  num_missing <- plots_per_page - length(plot_subset)
+  if (num_missing > 0) {
+    empty_plot <- ggplot() + theme_void()
+    plot_subset <- c(plot_subset, rep(list(empty_plot), num_missing))
+  }
+
+  combined_plot <- ggarrange(plotlist = plot_subset,
+                             ncol = plots_per_row,
+                             nrow = plots_per_col,
+                             align = "none")
+
+  # Save to A4 size (portrait): 8.27 x 11.69 inches
+  filename <- paste0(output_dir, "/Triana_ggarrange/UMAP_Celltypes_Page_", i, "_Triana_Harmony.jpeg")
+  ggsave(filename,
+         plot = combined_plot,
+         width = 8.27,
+         height = 11.69,
+         dpi = 300,
+         units = "in")
+}
+```
+
+# ggarrange for genetics
+```{r}
+# Make sure UMAP is accessible
+DefaultAssay(SAB) <- "RNA"
+
+# Get list of genotypes (excluding NA)
+genotypes <- sort(unique(na.omit(SAB@meta.data$Genetics)))
+
+# Prepare list of UMAP plots
+genetics_umap_list <- list()
+
+# Create one DimPlot per genotype
+for (genotype in genotypes) {
+  message("Plotting UMAP for genotype: ", genotype)
+
+  cells <- rownames(SAB@meta.data)[SAB@meta.data$Genetics == genotype]
+  cells <- unique(na.omit(cells))
+
+  p <- DimPlot(
+    SAB,
+    reduction = "RNA_harmony_umap",
+    cells.highlight = list(cells),
+    cols.highlight = "firebrick",
+    cols = "lightgray",
+    raster = FALSE
+  ) +
+    ggtitle(paste(genotype)) +
+    theme(plot.title = element_text(size = 10)) +
+    NoLegend()
+
+  safe_name <- gsub("[^A-Za-z0-9_]", "_", genotype)
+  genetics_umap_list[[safe_name]] <- p
+}
+
+# Arrange in A4 layout: 3 per row, 15 per page
+plots_per_row <- 3
+plots_per_page <- 15
+total_pages <- ceiling(length(genetics_umap_list) / plots_per_page)
+
+# Save pages as JPEGs
+for (i in seq_len(total_pages)) {
+  start_idx <- (i - 1) * plots_per_page + 1
+  end_idx <- min(i * plots_per_page, length(genetics_umap_list))
+  subset_plots <- genetics_umap_list[start_idx:end_idx]
+
+  if (length(subset_plots) < plots_per_page) {
+    empty_plot <- ggplot() + theme_void()
+    subset_plots <- c(subset_plots, rep(list(empty_plot), plots_per_page - length(subset_plots)))
+  }
+
+  combined_plot <- ggarrange(
+    plotlist = subset_plots,
+    ncol = plots_per_row,
+    nrow = ceiling(plots_per_page / plots_per_row),
+    align = "none"
+  )
+
+  ggsave(
+    filename = paste0(output_dir, "/Genotype_UMAPs_Page_", i, "_Harmony.jpeg"),
+    plot = combined_plot,
+    width = 8.27,
+    height = 11.69,
+    units = "in",
+    dpi = 300
+  )
+}
+
+```
+
+# GGarragne of ADT feature plots
+```{r}
+# Make sure RNA assay is default for UMAP
+DefaultAssay(SAB) <- "RNA"
+
+# Define all markers of interest
+adt_markers <- list(
+  "CD34" = "CD34.1",
+  "CD3" = "CD3-0034",
+  "CD4" = "CD4-0045",
+  "CD8" = "CD8",
+  "CD19" = "CD19.1",
+  "CD56" = "CD56",
+  "CD36" = "CD36.1",
+  "CD71" = "CD71"
+)
+
+# Initialize empty plot list
+plot_list <- list()
+
+# Loop and generate FeaturePlots from ADT data
+for (label in names(adt_markers)) {
+  marker <- adt_markers[[label]]
+  
+  if (!(marker %in% rownames(SAB[["ADT"]]@data))) {
+    warning(paste("Marker", marker, "not found in ADT assay. Skipping."))
+    next
+  }
+  
+  # Temporarily switch to ADT assay
+  DefaultAssay(SAB) <- "ADT"
+  
+  p <- FeaturePlot(
+    SAB,
+    features = marker,
+    reduction = "RNA_harmony_umap",
+    slot = "data",
+    min.cutoff = "q05",
+    max.cutoff = "q95",
+    pt.size = 0.1,
+    raster = FALSE
+  ) +
+    ggtitle(label) +
+    theme(legend.position = "none")
+  
+  plot_list[[label]] <- p
+}
+
+# Restore RNA assay
+DefaultAssay(SAB) <- "RNA"
+
+# Arrange plots with ggarrange
+final_plot <- ggarrange(
+  plotlist = plot_list,
+  ncol = 2,
+  nrow = ceiling(length(plot_list) / 2)
+)
+
+# Show the final arranged plot
+ggsave("ADT_FeaturePlots_Harmony.jpeg", plot = final_plot, width = 8.27, height = 11.69, units = "in", dpi = 300)
+```
+
+
+# Specifically have a UMAP with the Patients "HC3" "AML0028" and "AML1941"
+```{r}
+# Specify only the desired patients
+selected_patients <- c("HC3", "AML0028", "AML1941")
+
+# Create and store plots in a list
+selected_umap_list <- list()
+
+for (patient in selected_patients) {
+  message(paste("Creating UMAP for patient:", patient))
+  
+  patient_cells <- rownames(SAB@meta.data[SAB@meta.data$Patient == patient, ])
+  
+  p <- DimPlot(SAB, reduction = "umap",
+               cells.highlight = patient_cells,
+               cols.highlight = "orange",
+               cols = "lightgray",
+               raster = FALSE) +
+    ggtitle(paste("Patient:", patient)) +
+    NoLegend()
+  
+  selected_umap_list[[patient]] <- p
+}
+
+# Arrange the selected plots in a single row
+combined_selected_plot <- ggarrange(plotlist = selected_umap_list,
+                                    ncol = 3,
+                                    nrow = 1)
+
+ggsave("selected_patient_regular_umaps.png", combined_selected_plot, width = 12, height = 4)
+```
+
+# Clusters separate ggarrange
+```{r}
+# Make sure UMAP is accessible
+DefaultAssay(SAB) <- "RNA"
+
+# Get list of clusters (excluding NA)
+clusters <- sort(unique(na.omit(SAB@meta.data$seurat_clusters)))
+
+# Prepare list of UMAP plots
+clusters_umap_list <- list()
+
+# Create one DimPlot per cluster
+for (cluster in clusters) {
+  message("Plotting UMAP for harmony cluster: ", cluster)
+
+  cells <- rownames(SAB@meta.data)[SAB@meta.data$seurat_clusters == cluster]
+  cells <- unique(na.omit(cells))
+
+  p <- DimPlot(
+    SAB,
+    reduction = "RNA_harmony_umap",
+    cells.highlight = list(cells),
+    cols.highlight = "darkblue",
+    cols = "lightgray",
+    raster = FALSE
+  ) +
+    ggtitle(paste("Cluster number",cluster)) +
+    theme(plot.title = element_text(size = 10)) +
+    NoLegend()
+
+  safe_name <- gsub("[^A-Za-z0-9_]", "_", cluster)
+  clusters_umap_list[[safe_name]] <- p
+}
+
+# Arrange in A4 layout: 3 per row, 15 per page
+plots_per_row <- 3
+plots_per_page <- 15
+total_pages <- ceiling(length(clusters_umap_list) / plots_per_page)
+
+# Save pages as JPEGs
+for (i in seq_len(total_pages)) {
+  start_idx <- (i - 1) * plots_per_page + 1
+  end_idx <- min(i * plots_per_page, length(clusters_umap_list))
+  subset_plots <- clusters_umap_list[start_idx:end_idx]
+
+  if (length(subset_plots) < plots_per_page) {
+    empty_plot <- ggplot() + theme_void()
+    subset_plots <- c(subset_plots, rep(list(empty_plot), plots_per_page - length(subset_plots)))
+  }
+
+  combined_plot <- ggarrange(
+    plotlist = subset_plots,
+    ncol = plots_per_row,
+    nrow = ceiling(plots_per_page / plots_per_row),
+    align = "none"
+  )
+
+  ggsave(
+    filename = paste0("cluster_UMAPs_Page_", i, "_Harmony.jpeg"),
+    plot = combined_plot,
+    width = 8.27,
+    height = 11.69,
+    units = "in",
+    dpi = 300
+  )
+}
+
+```
+
+# ggarrange Triana majority cell type
+```{r}
+# Set default assay
+DefaultAssay(SAB) <- "RNA"
+
+# Get sorted list of unique cell types (excluding NA)
+celltypes <- sort(unique(na.omit(SAB@meta.data$Triana_cluster_majority_celltype)))
+
+# Prepare list of UMAP plots
+celltype_umap_list <- list()
+
+# Create one DimPlot per cell type
+for (celltype in celltypes) {
+  message("Plotting UMAP for cell type: ", celltype)
+
+  cells <- rownames(SAB@meta.data)[SAB@meta.data$Triana_cluster_majority_celltype == celltype]
+  cells <- unique(na.omit(cells))
+
+  p <- DimPlot(
+    SAB,
+    reduction = "RNA_harmony_umap",
+    cells.highlight = list(cells),
+    cols.highlight = "purple",
+    cols = "lightgray",
+    raster = FALSE
+  ) +
+    ggtitle(paste("Cell type:", celltype)) +
+    theme(plot.title = element_text(size = 10)) +
+    NoLegend()
+
+  # Sanitize name for use as a list key
+  safe_name <- gsub("[^A-Za-z0-9_]", "_", celltype)
+  celltype_umap_list[[safe_name]] <- p
+}
+
+# Layout parameters
+plots_per_row <- 3
+plots_per_page <- 15
+total_pages <- ceiling(length(celltype_umap_list) / plots_per_page)
+
+# Save pages as JPEGs
+for (i in seq_len(total_pages)) {
+  start_idx <- (i - 1) * plots_per_page + 1
+  end_idx <- min(i * plots_per_page, length(celltype_umap_list))
+  subset_plots <- celltype_umap_list[start_idx:end_idx]
+
+  # Fill in empty spots to complete the grid
+  if (length(subset_plots) < plots_per_page) {
+    empty_plot <- ggplot() + theme_void()
+    subset_plots <- c(subset_plots, rep(list(empty_plot), plots_per_page - length(subset_plots)))
+  }
+
+  combined_plot <- ggarrange(
+    plotlist = subset_plots,
+    ncol = plots_per_row,
+    nrow = ceiling(plots_per_page / plots_per_row),
+    align = "none"
+  )
+
+  ggsave(
+    filename = paste0("Triana_Celltypes_UMAP_Page_", i, ".jpeg"),
+    plot = combined_plot,
+    width = 8.27,
+    height = 11.69,
+    units = "in",
+    dpi = 300
+  )
+}
+
+
+```
+
+# ggarrange Azimuth l1
+```{r}
+# Set default assay
+DefaultAssay(SAB) <- "RNA"
+
+# Get sorted list of unique cell types (excluding NA)
+celltypes <- sort(unique(na.omit(SAB@meta.data$Azimuth_cluster_majority_celltype_l1)))
+
+# Prepare list of UMAP plots
+celltype_umap_list <- list()
+
+# Create one DimPlot per cell type
+for (celltype in celltypes) {
+  message("Plotting UMAP for cell type: ", celltype)
+
+  cells <- rownames(SAB@meta.data)[SAB@meta.data$Azimuth_cluster_majority_celltype_l1 == celltype]
+  cells <- unique(na.omit(cells))
+
+  p <- DimPlot(
+    SAB,
+    reduction = "RNA_harmony_umap",
+    cells.highlight = list(cells),
+    cols.highlight = "purple",
+    cols = "lightgray",
+    raster = FALSE
+  ) +
+    ggtitle(paste("Cell type:", celltype)) +
+    theme(plot.title = element_text(size = 10)) +
+    NoLegend()
+
+  # Sanitize name for use as a list key
+  safe_name <- gsub("[^A-Za-z0-9_]", "_", celltype)
+  celltype_umap_list[[safe_name]] <- p
+}
+
+# Layout parameters
+plots_per_row <- 3
+plots_per_page <- 15
+total_pages <- ceiling(length(celltype_umap_list) / plots_per_page)
+
+# Save pages as JPEGs
+for (i in seq_len(total_pages)) {
+  start_idx <- (i - 1) * plots_per_page + 1
+  end_idx <- min(i * plots_per_page, length(celltype_umap_list))
+  subset_plots <- celltype_umap_list[start_idx:end_idx]
+
+  # Fill in empty spots to complete the grid
+  if (length(subset_plots) < plots_per_page) {
+    empty_plot <- ggplot() + theme_void()
+    subset_plots <- c(subset_plots, rep(list(empty_plot), plots_per_page - length(subset_plots)))
+  }
+
+  combined_plot <- ggarrange(
+    plotlist = subset_plots,
+    ncol = plots_per_row,
+    nrow = ceiling(plots_per_page / plots_per_row),
+    align = "none"
+  )
+
+  ggsave(
+    filename = paste0("Azimuth_l1_Celltypes_UMAP_Page_", i, ".jpeg"),
+    plot = combined_plot,
+    width = 8.27,
+    height = 11.69,
+    units = "in",
+    dpi = 300
+  )
+}
+
+
+```
+
+# ggarrange Azimuth l2
+```{r}
+# Set default assay
+DefaultAssay(SAB) <- "RNA"
+
+# Get sorted list of unique cell types (excluding NA)
+celltypes <- sort(unique(na.omit(SAB@meta.data$Azimuth_cluster_majority_celltype_l2)))
+
+# Prepare list of UMAP plots
+celltype_umap_list <- list()
+
+# Create one DimPlot per cell type
+for (celltype in celltypes) {
+  message("Plotting UMAP for cell type: ", celltype)
+
+  cells <- rownames(SAB@meta.data)[SAB@meta.data$Azimuth_cluster_majority_celltype_l2 == celltype]
+  cells <- unique(na.omit(cells))
+
+  p <- DimPlot(
+    SAB,
+    reduction = "RNA_harmony_umap",
+    cells.highlight = list(cells),
+    cols.highlight = "purple",
+    cols = "lightgray",
+    raster = FALSE
+  ) +
+    ggtitle(paste("Cell type:", celltype)) +
+    theme(plot.title = element_text(size = 10)) +
+    NoLegend()
+
+  # Sanitize name for use as a list key
+  safe_name <- gsub("[^A-Za-z0-9_]", "_", celltype)
+  celltype_umap_list[[safe_name]] <- p
+}
+
+# Layout parameters
+plots_per_row <- 3
+plots_per_page <- 15
+total_pages <- ceiling(length(celltype_umap_list) / plots_per_page)
+
+# Save pages as JPEGs
+for (i in seq_len(total_pages)) {
+  start_idx <- (i - 1) * plots_per_page + 1
+  end_idx <- min(i * plots_per_page, length(celltype_umap_list))
+  subset_plots <- celltype_umap_list[start_idx:end_idx]
+
+  # Fill in empty spots to complete the grid
+  if (length(subset_plots) < plots_per_page) {
+    empty_plot <- ggplot() + theme_void()
+    subset_plots <- c(subset_plots, rep(list(empty_plot), plots_per_page - length(subset_plots)))
+  }
+
+  combined_plot <- ggarrange(
+    plotlist = subset_plots,
+    ncol = plots_per_row,
+    nrow = ceiling(plots_per_page / plots_per_row),
+    align = "none"
+  )
+
+  ggsave(
+    filename = paste0("Azimuth_l2_Celltypes_UMAP_Page_", i, ".jpeg"),
+    plot = combined_plot,
+    width = 8.27,
+    height = 11.69,
+    units = "in",
+    dpi = 300
+  )
+}
+
+
+```
+
+# DF prediction ggarrange
+```{r}
+# Set default assay
+DefaultAssay(SAB) <- "RNA"
+
+# Set all non-"Singlet" values in DFPrediction to "Doublet"
+SAB@meta.data$DFPrediction <- ifelse(SAB@meta.data$DFPrediction == "Singlet", 
+                                     "Singlet", 
+                                     "Doublet")
+
+# Get sorted list of unique cell types (now only "Singlet" and "Doublet")
+celltypes <- sort(unique(na.omit(SAB@meta.data$DFPrediction)))
+
+
+# Get sorted list of unique cell types (excluding NA)
+celltypes <- sort(unique(na.omit(SAB@meta.data$DFPrediction)))
+
+# Prepare list of UMAP plots
+celltype_umap_list <- list()
+
+# Create one DimPlot per cell type
+for (celltype in celltypes) {
+  message("Plotting UMAP for cell type: ", celltype)
+
+  cells <- rownames(SAB@meta.data)[SAB@meta.data$DFPrediction == celltype]
+  cells <- unique(na.omit(cells))
+
+  p <- DimPlot(
+    SAB,
+    reduction = "RNA_harmony_umap",
+    cells.highlight = list(cells),
+    cols.highlight = "lightgreen",
+    cols = "lightgray",
+    raster = FALSE
+  ) +
+    ggtitle(paste("Cell type:", celltype)) +
+    theme(plot.title = element_text(size = 10)) +
+    NoLegend()
+
+  # Sanitize name for use as a list key
+  safe_name <- gsub("[^A-Za-z0-9_]", "_", celltype)
+  celltype_umap_list[[safe_name]] <- p
+}
+
+# Layout parameters
+plots_per_row <- 3
+plots_per_page <- 15
+total_pages <- ceiling(length(celltype_umap_list) / plots_per_page)
+
+# Save pages as JPEGs
+for (i in seq_len(total_pages)) {
+  start_idx <- (i - 1) * plots_per_page + 1
+  end_idx <- min(i * plots_per_page, length(celltype_umap_list))
+  subset_plots <- celltype_umap_list[start_idx:end_idx]
+
+  # Fill in empty spots to complete the grid
+  if (length(subset_plots) < plots_per_page) {
+    empty_plot <- ggplot() + theme_void()
+    subset_plots <- c(subset_plots, rep(list(empty_plot), plots_per_page - length(subset_plots)))
+  }
+
+  combined_plot <- ggarrange(
+    plotlist = subset_plots,
+    ncol = plots_per_row,
+    nrow = ceiling(plots_per_page / plots_per_row),
+    align = "none"
+  )
+
+  ggsave(
+    filename = paste0("DFprediction_UMAP_Page_", i, ".jpeg"),
+    plot = combined_plot,
+    width = 8.27,
+    height = 11.69,
+    units = "in",
+    dpi = 300
+  )
+}
+```
+
+# Features and counts
+```{r}
+FeaturePlot(SAB, features = "nFeature_RNA", reduction = "RNA_harmony_umap", raster = FALSE) +
+  ggtitle("Number of Genes (nFeature_RNA)")
+
+FeaturePlot(SAB, features = "nCount_RNA", reduction = "RNA_harmony_umap", raster = FALSE) +
+  ggtitle("Total Counts (nCount_RNA)")
+```
+
+# Contrasts in UMAP form
+```{r}
+# AML vs nonAML, meaning DiseaseStatus
+SAB$DiseaseStatus <- ifelse(grepl("^AML", SAB$Patient), "AML", "nonAML")
+unique(SAB$DiseaseStatus)
+
+# Survival info, yes vs no
+unique(SAB@meta.data$Survival_two_years)
+
+# NPM1 info, Mutated vs other genotype
+# Make a NPM1 subset
+SAB$NPM1_status <-  ifelse(
+  is.na(SAB@meta.data$Genetics) | SAB@meta.data$Genetics == "NOS (Not otherwise specified)", 
+  NA, 
+  ifelse(SAB@meta.data$Genetics == "mutated NPM1", "NPM1", "Other_Genotype")
+)
+unique(SAB$NPM1_status)
+```
+```{r}
+# Create Dimplots
+DimPlot(SAB, 
+        group.by = "Sorting", 
+        reduction = "RNA_harmony_umap", 
+        raster = FALSE,
+        cols = c("CD34+" = "#9D825D", "L/D" = "grey90")
+        ) +
+  ggtitle("CD34+ Sorting Highlighted on UMAP")
+
+```
+
+```{r}
+# Subset CD34+ cells
+cd34_only <- subset(SAB, subset = Sorting == "CD34+")
+
+# Make sure identity class is set to DiseaseStatus
+Idents(cd34_cells) <- "DiseaseStatus"
+
+# Subset AML and nonAML separately
+cd34_aml <- subset(cd34_cells, idents = "AML")
+#cd34_nonaml <- subset(cd34_cells, idents = "nonAML")
+
+# Plot AML
+p_aml <- DimPlot(cd34_aml,
+                 reduction = "RNA_harmony_umap",
+                 cols = "orange",
+                 raster = FALSE) +
+  ggtitle("CD34+ subset, AML") +
+  theme(legend.position = "none", plot.title = element_text(hjust = 0.5))
+
+# Plot nonAML
+p_nonaml <- DimPlot(cd34_nonaml,
+                    reduction = "RNA_harmony_umap",
+                    cols = "blue",
+                    raster = FALSE) +
+  ggtitle("CD34+ subset, nonAML") +
+  theme(legend.position = "none", plot.title = element_text(hjust = 0.5))
+
+# Arrange side by side
+ggarrange(p_aml, p_nonaml, ncol = 2)
+
+ggsave("AMl_vs_nonAML_contrast_UMAP.png", width = 9, height = 4)
+
+```
+
+```{r}
+library(Seurat)
+library(ggplot2)
+library(ggpubr)
+
+# Set identity class
+Idents(cd34_cells) <- "Survival_two_years"
+
+# Subset Survival == yes and no
+cd34_surv_yes <- subset(cd34_cells, idents = "yes")
+cd34_surv_no <- subset(cd34_cells, idents = "no")
+
+# Plot Survival == yes
+p_surv_yes <- DimPlot(cd34_surv_yes,
+                      reduction = "RNA_harmony_umap",
+                      cols = "orange",
+                      raster = FALSE) +
+  ggtitle("CD34+ subset, Survival: Yes") +
+  theme(legend.position = "none", plot.title = element_text(hjust = 0.5))
+
+# Plot Survival == no
+p_surv_no <- DimPlot(cd34_surv_no,
+                     reduction = "RNA_harmony_umap",
+                     cols = "blue",
+                     raster = FALSE) +
+  ggtitle("CD34+ subset, Survival: No") +
+  theme(legend.position = "none", plot.title = element_text(hjust = 0.5))
+
+# Arrange side by side
+ggarrange(p_surv_yes, p_surv_no, ncol = 2)
+
+# Save plot
+ggsave("Survival_contrast_UMAP.png", width = 9, height = 4)
+```
+
+```{r}
+# Set identity class
+Idents(cd34_cells) <- "NPM1_status"
+
+# Subset NPM1 mutated and Other Genotype
+cd34_npm1 <- subset(cd34_cells, idents = "NPM1")
+cd34_other <- subset(cd34_cells, idents = "Other_Genotype")
+
+# Plot NPM1
+p_npm1 <- DimPlot(cd34_npm1,
+                  reduction = "RNA_harmony_umap",
+                  cols = "orange",
+                  raster = FALSE) +
+  ggtitle("CD34+ subset, NPM1 Mutated") +
+  theme(legend.position = "none", plot.title = element_text(hjust = 0.5))
+
+# Plot Other Genotype
+p_other <- DimPlot(cd34_other,
+                   reduction = "RNA_harmony_umap",
+                   cols = "blue",
+                   raster = FALSE) +
+  ggtitle("CD34+ subset, Other Genotype") +
+  theme(legend.position = "none", plot.title = element_text(hjust = 0.5))
+
+# Arrange side by side
+ggarrange(p_npm1, p_other, ncol = 2)
+
+# Save the plot
+ggsave("NPM1_contrast_UMAP.png", width = 9, height = 4)
+
+```
+

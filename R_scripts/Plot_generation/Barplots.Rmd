@@ -1,0 +1,57 @@
+```{r}
+library(Seurat)
+library(ggplot2)
+library(dplyr)
+```
+
+```{r}
+# Define paths and load metadata
+setwd("C:/Users/Robbe Fonteyn/OneDrive - UGent/AJ 2024-2025/Master's_Dissertation/AML-CITEseq/Data")
+SAB <- readRDS("SAB_slimmed_final_harmony.rds")
+metadata <- SAB@meta.data
+rm(SAB)
+
+output_dir <- "barplot_output"
+```
+
+```{r}
+# Define a reusable plotting function
+plot_bar_per_cluster <- function(metadata, cluster_col, fill_col, plot_title, file_name) {
+  data <- metadata %>%
+    group_by(Cluster = .data[[cluster_col]], FillGroup = .data[[fill_col]]) %>%
+    summarise(CellCount = n(), .groups = "drop") %>%
+    mutate(Cluster = factor(Cluster, levels = sort(as.numeric(unique(as.character(Cluster))))))
+
+  plot <- ggplot(data, aes(x = Cluster, y = CellCount, fill = FillGroup)) +
+    geom_bar(stat = "identity", color = "black", size = 0.05) +
+    labs(
+      title = plot_title,
+      x = "Cluster",
+      y = "Number of Cells",
+      fill = fill_col
+    ) +
+    theme_minimal() +
+    theme(
+      axis.text.x = element_text(angle = 45, hjust = 1),
+      legend.position = "right",
+      legend.text = element_text(size = 5),
+      legend.title = element_text(size = 6),
+      legend.key.size = unit(0.2, "cm")
+    ) +
+    guides(fill = guide_legend(ncol = 1))
+
+  ggsave(
+    filename = file.path(output_dir, file_name),
+    plot = plot,
+    width = 8,
+    height = 6,
+    dpi = 300
+  )
+}
+
+plot_bar_per_cluster(metadata, "RNA_harmony_clusters", "predicted.celltype.l1", 
+                     "Distribution of Azimuth Cell Types (Layer 1) Across Harmony Clusters", 
+                     "Azimuth_Celltypes_l1_per_RNA_harmony_clusters_Full_SAB_Harmony.jpg")
+
+```
+

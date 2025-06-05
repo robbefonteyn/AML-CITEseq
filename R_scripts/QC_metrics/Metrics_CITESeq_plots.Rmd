@@ -1,0 +1,129 @@
+---
+title: "metrics"
+author: "Robbe Fonteyn"
+date: "2025-06-05"
+output: html_document
+---
+
+```{r}
+library(ggplot2)
+assay <- "CITESeq"
+```
+
+# Sequencing metrics
+## Get all metrics in 1 table
+### Overview data
+```{r}
+all_data <- list("CITESeq" = setdiff(sprintf("SAB%03d", 1:35), "SAB034"))
+all_data
+
+all_data_reseq <- list("CITESeq_reseq" = sprintf("SAB%03d", c(1:10, 13:14, 19)))
+all_data_reseq
+```
+
+### Make data frames
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+read_metrics <- function(assay, all_data, file_extension) {
+  all_metrics <- list()
+  
+  for (ID in all_data[[assay]]) {
+    current_filename <- paste0(ID, file_extension)
+    print(paste("Reading in file:", current_filename))
+    
+    csv <- read.csv(current_filename, check.names = FALSE)
+    
+    if (is.null(all_metrics[[assay]])) {
+      all_metrics[[assay]] <- matrix(NA,
+                                      nrow = length(all_data[[assay]]), 
+                                      ncol = ncol(csv),
+                                      dimnames = list(all_data[[assay]], colnames(csv)))
+    }
+    
+    all_metrics[[assay]][ID, ] <- unlist(csv)
+    cat("Done Reading File\n\n")
+  }
+  
+  all_metrics[[assay]] <- data.frame(all_metrics[[assay]], check.names = FALSE)
+  
+  return(all_metrics)
+}
+
+metrics_CITESeq <- read_metrics("CITESeq", all_data, "_metrics_summary.csv")
+metrics_CITESeq_reseq <- read_metrics("CITESeq_reseq", all_data_reseq, "_reseq_metrics_summary.csv")
+
+```
+
+### Clean up data frames
+```{r}
+metrics_CITESeq$CITESeq <- data.frame(sapply(metrics_CITESeq$CITESeq, function(x) as.numeric(gsub("%", "", gsub(",", "", x)))), check.names = FALSE)
+metrics_CITESeq$CITESeq$ID <- as.factor(all_data$CITESeq)
+metrics_CITESeq$CITESeq$Day <- as.factor(rep(c("Day1", "Day2", "Day3"), times = c(7, 12, 15)))
+
+metrics_CITESeq_reseq$CITESeq_reseq <- data.frame(sapply(metrics_CITESeq_reseq$CITESeq_reseq, function(x) as.numeric(gsub("%", "", gsub(",", "", x)))), check.names = FALSE)
+metrics_CITESeq_reseq$CITESeq_reseq$ID <- as.factor(all_data_reseq$CITESeq_reseq)
+metrics_CITESeq_reseq$CITESeq_reseq$Day <- as.factor(rep(c("Day1", "Day2"), times = c(7, 6)))
+```
+
+## Figures 
+Original sequencing and the re-sequencing separate
+```{r}
+make_plots <- function(assay, all_data, all_metrics, colors) {
+  pdf(paste0("metrics_", assay, ".pdf"), width = length(all_data[[assay]]) / 2 + 2)
+  
+  for (feature in colnames(all_metrics[[assay]])) {
+    p <- ggplot(all_metrics[[assay]], aes(x = ID, y = !!sym(feature))) +
+      geom_segment(aes(xend = ID, yend = 0)) +
+      geom_point(size = 4, aes(color = Day)) +
+      scale_color_manual(values = colors) +
+      theme_minimal() +
+      xlab("")
+    
+    print(p)
+  }
+  
+  dev.off()
+}
+
+colors_3_days <- c("#ff006e", "#3a86ff", "#00ff00")
+colors_2_days <- c("#ff006e", "#3a86ff")
+
+make_plots("CITESeq", all_data, all_metrics, colors_3_days)
+make_plots("CITESeq_reseq", all_data_reseq, metrics_CITESeq_reseq, colors_2_days)
+
+```
+
+Comparison figure for deep and shallow sequencing
+```{r}
+# Merging the two metrics objects based on common samples (ID should be the unique identifier)
+common_samples <- intersect(metrics_CITESeq[["CITESeq"]]$ID, metrics_CITESeq_reseq[["CITESeq_reseq"]]$ID)
+merged_metrics <- merge(metrics_CITESeq[["CITESeq"]][metrics_CITESeq[["CITESeq"]]$ID %in% common_samples, ], 
+                        metrics_CITESeq_reseq[["CITESeq_reseq"]][metrics_CITESeq_reseq[["CITESeq_reseq"]]$ID %in% common_samples, ], 
+                        by = "ID", suffixes = c("_shallow", "_deep"))
+
+
+# Open a PDF for the comparative plots
+pdf("Comparison_metrics_CITESeq.pdf", width = length(common_samples) / 2 + 2)
+
+# Iterate through features and create comparative plots
+for (feature in colnames(metrics_CITESeq_reseq[["CITESeq_reseq"]])) {
+  p <- ggplot(merged_metrics, aes(x = ID)) +
+    geom_point(aes(y = !!sym(paste0(feature, "_shallow")), color = "Shallow"), size = 4) +
+    geom_point(aes(y = !!sym(paste0(feature, "_deep")), color = "Deep"), size = 4) +
+    geom_segment(aes(xend = ID, y = !!sym(paste0(feature, "_shallow")), 
+                     yend = !!sym(paste0(feature, "_deep"))), linetype = "dashed") +
+    scale_color_manual(values = c("Shallow" = "blue", "Deep" = "red")) +
+    theme_minimal() +
+    xlab("") +
+    ylab(feature) +
+    ylim(0, NA)
+  
+  print(p)
+}
+
+dev.off()
+```
+
+```{r}
+sessionInfo()
+```
+

@@ -1,0 +1,114 @@
+---
+title: "Code_for_plots.R"
+author: "Robbe Fonteyn"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+# Load data
+meta <- read.csv("Metadata_with_seurat_cellNr.csv", header = TRUE, sep = ",")
+
+# Load required libraries
+library(ggplot2)
+library(scales)
+library(ggpattern)
+library(dplyr)
+library(tibble)
+library(RColorBrewer)
+library(ggtext)
+```
+
+```{r}
+# Define patient color palette
+color_palette <- c(
+  "#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd",
+  "#8c564b", "#e377c2", "#7f7f7f", "#bcbd22", "#17becf",
+  "#a55194", "#393b79", "#8c6d31", "#e7ba52", "#843c39",
+  "#d6616b", "#7b4173", "#fdae6b", "#31a354", "#636363"
+)
+
+# Ensure correct factor levels
+meta$day <- as.factor(meta$day)
+meta$sample.type <- as.factor(meta$sample.type)
+
+# Generate colors for day annotations
+unique_days <- unique(meta$day)
+day_colors <- setNames(brewer.pal(length(unique_days), "Set1"), unique_days)
+
+# Map day colors to experiment labels
+day_by_exp <- meta[!duplicated(meta$exp), c("exp", "day")]
+axis_label_colors <- setNames(day_colors[as.character(day_by_exp$day)], day_by_exp$exp)
+
+# HTML-colored x-axis labels
+meta$exp_colored <- paste0("<span style='color:", day_colors[as.character(meta$day)], "'>", meta$exp, "</span>")
+axis_labels <- meta[!duplicated(meta$exp), c("exp", "exp_colored")]
+label_map <- setNames(axis_labels$exp_colored, axis_labels$exp)
+
+```
+
+```{r}
+# Plot: Sorted cells per sample
+ggplot(meta, aes(x = exp, y = Nr.cells.sorted, fill = Patient, pattern = sample.type)) +
+  geom_bar_pattern(
+    stat = "identity", position = "fill",
+    color = "grey", pattern_fill = "black",
+    pattern_density = 0.01, pattern_spacing = 0.01,
+    pattern_key_scale_factor = 0.5
+  ) +
+  geom_text(
+    aes(label = Nr.cells.sorted,
+        angle = ifelse(Nr.cells.sorted < quantile(Nr.cells.sorted, 0.1), 0, 90)),
+    position = position_fill(vjust = 0.5),
+    size = 3, color = "white", check_overlap = TRUE
+  ) +
+  facet_wrap(~ Sorting, scales = "free_x") +
+  scale_x_discrete(labels = label_map) +
+  scale_fill_manual(values = color_palette) +
+  scale_pattern_manual(values = c("BM" = "circle", "PB" = "crosshatch", "AF" = "none")) +
+  theme_bw() +
+  theme(
+    axis.text.x = element_markdown(angle = 90, hjust = 1, vjust = 0.5),
+    legend.title = element_text(size = 10),
+    legend.text = element_text(size = 8),
+    legend.spacing.y = unit(0.2, "cm"),
+    legend.key.size = unit(0.9, "lines")
+  )
+
+# Export
+#ggsave("dataset_overview_sorted_cells.png", width = 10, height = 6, dpi = 300)
+```
+
+
+```{r}
+# Plot: Seurat cells per sample
+ggplot(meta, aes(x = exp, y = Seurat_cells, fill = Patient, pattern = sample.type)) +
+  geom_bar_pattern(
+    stat = "identity", position = "fill",
+    color = "grey", pattern_fill = "black",
+    pattern_density = 0.01, pattern_spacing = 0.01,
+    pattern_key_scale_factor = 0.5
+  ) +
+  geom_text(
+    aes(label = Seurat_cells,
+        angle = ifelse(Seurat_cells < quantile(Seurat_cells, 0.1), 0, 90)),
+    position = position_fill(vjust = 0.5),
+    size = 3, color = "white", check_overlap = TRUE
+  ) +
+  facet_wrap(~ Sorting, scales = "free_x") +
+  scale_x_discrete(labels = label_map) +
+  scale_fill_manual(values = color_palette) +
+  scale_pattern_manual(values = c("BM" = "circle", "PB" = "crosshatch", "AF" = "none")) +
+  theme_bw() +
+  theme(
+    axis.text.x = element_markdown(angle = 90, hjust = 1, vjust = 0.5),
+    legend.title = element_text(size = 10),
+    legend.text = element_text(size = 8),
+    legend.spacing.y = unit(0.2, "cm"),
+    legend.key.size = unit(0.9, "lines")
+  )
+
+# Export
+#ggsave("dataset_overview_seurat_cells_by_day_and_sampletype.png", width = 10, height = 6, dpi = 300)
+
+```

@@ -1,0 +1,45 @@
+
+```{r}
+library(harmony)
+library(Seurat)
+library(dplyr)
+library(cowplot)
+library(ggplot2)
+```
+
+```{r}
+# Load the SAB
+setwd("C:/Users/Robbe Fonteyn/OneDrive - UGent/AJ 2024-2025/Master's_Dissertation/AML-CITEseq/Data")
+SAB <- readRDS("SAB_slimmed_final.rds")
+```
+
+```{r}
+set.seed(2410)
+SAB <- RunHarmony(SAB, group.by.vars = c("Patient", "orig.ident", "Sorting", "day"), reduction.use = "pca", reduction.save = "RNA_harmony")
+SAB <- RunUMAP(SAB, reduction = "RNA_harmony", dims = 1:30, reduction.name = "RNA_harmony_umap")
+SAB <- FindNeighbors(SAB, dims = 1:20, reduction= "RNA_harmony", graph.name = c("RNA_harmony_nn", "RNA_harmony_snn"))
+SAB <- FindClusters(SAB, resolution = 0.5, graph = "RNA_harmony_snn", cluster.name = "RNA_harmony_clusters")
+```
+
+```{r}
+ElbowPlot(SAB, reduction = "RNA_harmony")
+```
+
+```{r}
+p1 <- DimPlot(SAB, reduction = "RNA_harmony_umap", group.by = "predicted.celltype.l2", raster = FALSE, label = TRUE) + NoLegend()
+p2 <- DimPlot(SAB, reduction = "RNA_harmony_umap", group.by = "Triana_celltype", label = TRUE, raster = FALSE) + NoLegend()
+plot_grid(p1, p2)
+```
+
+```{r}
+DimPlot(SAB, reduction = "RNA_harmony_umap", group.by = "RNA_snn_res.0.5",label =TRUE, raster = FALSE) + NoLegend()
+DimPlot(SAB, reduction = "RNA_harmony_umap", group.by = "Azimuth_cluster_majority_celltype_l1", label = TRUE, raster = FALSE)
+DimPlot(SAB, reduction = "RNA_harmony_umap", group.by = "Triana_cluster_majority_celltype", label = TRUE, raster = FALSE) + NoLegend()
+DimPlot(SAB, reduction = "RNA_harmony_umap", group.by = "Azimuth_cluster_majority_celltype_l2", label = TRUE, raster = FALSE)
+```
+
+```{r}
+#Save the Seurat object with Harmony embeddings
+saveRDS(SAB, file = "SAB_Harmony_new.rds")
+```
+

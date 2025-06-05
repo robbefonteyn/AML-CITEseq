@@ -1,0 +1,560 @@
+# Loading required libraries
+
+We begin by loading all the necessary R packages for single-cell analysis, data manipulation, and cell-cell communication modeling.
+```{r, include=FALSE, warning=FALSE, message=FALSE}
+library(Seurat)
+library(dplyr)
+library(SingleCellExperiment)
+library(ggplot2)
+library(nichenetr)
+library(multinichenetr)
+```
+
+# Load and Preprocess Seurat Object
+
+The working directory is set to the project location, and the harmonized Seurat object is loaded. An additional metadata column is created to classify samples as AML or non-AML.
+```{r}
+setwd(".../AML-CITEseq/Data")
+SAB <- readRDS("SAB_slimmed_final_harmony.rds")
+
+# Make DiseaseStatus column
+SAB$DiseaseStatus <- ifelse(grepl("^AML", SAB$Patient), "AML", "nonAML")
+# Make a NPM1 column
+SAB$NPM1_status <-  ifelse(
+  is.na(SAB@meta.data$Genetics) | SAB@meta.data$Genetics == "NOS (Not otherwise specified)", 
+  NA, 
+  ifelse(SAB@meta.data$Genetics == "mutated NPM1", "NPM1", "Other_Genotype")
+)
+```
+
+
+# Subset by CD34+ Sorting
+
+Subsetting the full object to the CD34+ sorted cells.
+```{r}
+SAB <- subset(SAB, subset = Sorting == "CD34+")
+gc()
+```
+
+# Convert to a SingleCellExperiment
+Unnecessary assays are removed to avoid conversion errors. The assay is switched to ADT before converting to the SingleCellExperiment object format.
+```{r}
+# Remove additional assays that cause conversion issues
+DefaultAssay(SAB) <- "ADT"
+SAB[["RNA"]] <- NULL
+SAB[["HTO"]] <- NULL
+
+# Convert to SingleCellExperiment and check conversion
+SAB.sce <- as.SingleCellExperiment(SAB)
+rm(SAB)
+gc()
+```
+
+# Defining variables for grouping and contrast analysis
+Metadata columns for sample, group, and cell type ID are specified. Additional parameters are initialized for downstream filtering and modeling. The cell type labels are also converted to valid ones for the analysis.
+```{r}
+sample_id <- "Patient"
+group_id = "Survival_two_years"
+celltype_id = "Azimuth_cluster_majority_celltype_l2"
+
+contrasts_oi = c("'yes-no','no-yes'")
+contrast_tbl = tibble(contrast = c("yes-no", "no-yes"), group = c("yes", "no"))
+
+min_cells = 10
+fraction_cutoff = 0.05
+min_sample_prop = 0.5
+
+covariates = NA
+batches = NA
+
+# Clean celltype labels to be syntactically valid
+colData(SAB.sce)[[celltype_id]] <- make.names(colData(SAB.sce)[[celltype_id]])
+```
+
+# Creating a metadata table for grouping samples
+Metadata is extracted and grouped based on whether batch information is present or not.
+```{r}
+metadata_combined = SummarizedExperiment::colData(SAB.sce) %>% tibble::as_tibble()
+
+if(!is.na(batches)){
+  grouping_tbl = metadata_combined[,c(sample_id, group_id, batches)] %>% 
+    tibble::as_tibble() %>% distinct()
+  colnames(grouping_tbl) = c("sample","group",batches)
+} else {
+  grouping_tbl = metadata_combined[,c(sample_id, group_id)] %>% 
+    tibble::as_tibble() %>% distinct()
+  colnames(grouping_tbl) = c("sample","group")
+}
+```
+
+# Filtering cells with complete metadata
+Only cells with non-missing values for sample, group, and cell type are retained for analysis.
+```{r}
+SAB.sce <- SAB.sce[
+  , !is.na(SummarizedExperiment::colData(SAB.sce)[[sample_id]]) &
+    !is.na(SummarizedExperiment::colData(SAB.sce)[[group_id]]) &
+    !is.na(SummarizedExperiment::colData(SAB.sce)[[celltype_id]])
+]
+```
+
+# Quantifying cell type abundance per sample and group
+This function estimates the number of cells per sample and group for each cell type. It is critical for identifying condition-specific or rare cell types.
+```{r}
+abundance_info = get_abundance_info(
+  sce = SAB.sce, 
+  sample_id = sample_id, group_id = group_id, celltype_id = celltype_id, 
+  min_cells = min_cells, 
+  senders_oi = senders_oi, receivers_oi = receivers_oi, 
+  batches = batches
+  )
+```
+
+```{r}
+abundance_info$abund_plot_sample
+```
+
+# Identifying cell types specific to one condition
+Cell types present in one group and absent in another are defined for downstream filtering and interpretation.
+```{r}
+abundance_df_summarized <- abundance_info$abundance_data %>%
+  dplyr::mutate(keep = as.logical(keep)) %>%
+  dplyr::group_by(group_id, celltype_id) %>%
+  dplyr::summarise(samples_present = sum(keep), .groups = "drop") %>%
+  tibble::as_tibble()
+
+celltypes_absent_one_condition = abundance_df_summarized %>% 
+  filter(samples_present == 0) %>% pull(celltype_id) %>% unique() 
+# find truly condition-specific cell types by searching for cell types 
+# truely absent in at least one condition
+
+celltypes_present_one_condition = abundance_df_summarized %>% 
+  filter(samples_present >= 2) %>% pull(celltype_id) %>% unique() 
+# require presence in at least 2 samples of one group so 
+# it is really present in at least one condition
+
+condition_specific_celltypes = intersect(
+  celltypes_absent_one_condition, 
+  celltypes_present_one_condition)
+
+```
+
+# Identifying cell types absent in all conditions
+This step identifies cell types that are nearly or completely absent across both groups, helping to exclude noise or non-informative cell populations.
+```{r}
+total_nr_conditions = SummarizedExperiment::colData(SAB.sce)[,group_id] %>% 
+  unique() %>% length() 
+
+absent_celltypes <- abundance_df_summarized %>%
+  dplyr::filter(samples_present < 2) %>%
+  dplyr::count(celltype_id) %>%
+  dplyr::filter(n == total_nr_conditions) %>%
+  dplyr::pull(celltype_id)
+  
+print("condition-specific celltypes:")
+print(condition_specific_celltypes)
+  
+print("absent celltypes:")
+print(absent_celltypes)
+```
+
+# Flag for analyzing condition-specific cell types
+A flag is set to optionally include or exclude condition-specific cell types in downstream analysis.
+```{r}
+analyse_condition_specific_celltypes = FALSE
+```
+
+
+# Filtering expressed genes
+Here we compute the fraction of cells expressing each gene in each cell type and group. Genes that are sparsely expressed are filtered out to reduce noise.
+```{r}
+frq_list <- get_frac_exprs(
+  sce = SAB.sce,
+  sample_id = sample_id,
+  group_id = group_id,
+  celltype_id = celltype_id,
+  batches = batches,
+  min_cells = min_cells,
+  fraction_cutoff = fraction_cutoff,
+  min_sample_prop = min_sample_prop
+)
+
+genes_oi <- frq_list$expressed_df %>%
+  filter(expressed == TRUE) %>%
+  pull(gene) %>%
+  unique()
+
+```
+
+```{r}
+abundance_info$abund_plot_sample
+```
+
+# Downloading ligand-receptor and ligand-target data
+
+Depending on the species, the correct ligand-receptor interaction data and ligand-target matrix are loaded. These datasets are used to infer communication between cell types.
+```{r}
+options(timeout = 240)
+
+organism = "human"
+
+if(organism == "human"){
+  
+  lr_network_all = 
+    readRDS(url(
+      "https://zenodo.org/record/10229222/files/lr_network_human_allInfo_30112033.rds"
+      )) %>% 
+    mutate(
+      ligand = convert_alias_to_symbols(ligand, organism = organism), 
+      receptor = convert_alias_to_symbols(receptor, organism = organism))
+  
+  lr_network_all = lr_network_all  %>% 
+    mutate(ligand = make.names(ligand), receptor = make.names(receptor)) 
+  
+  lr_network = lr_network_all %>% 
+    distinct(ligand, receptor)
+  
+  ligand_target_matrix = readRDS(url(
+    "https://zenodo.org/record/7074291/files/ligand_target_matrix_nsga2r_final.rds"
+    ))
+  
+  colnames(ligand_target_matrix) = colnames(ligand_target_matrix) %>% 
+    convert_alias_to_symbols(organism = organism) %>% make.names()
+  rownames(ligand_target_matrix) = rownames(ligand_target_matrix) %>% 
+    convert_alias_to_symbols(organism = organism) %>% make.names()
+  
+  lr_network = lr_network %>% filter(ligand %in% colnames(ligand_target_matrix))
+  ligand_target_matrix = ligand_target_matrix[, lr_network$ligand %>% unique()]
+  
+} else if(organism == "mouse"){
+  
+  lr_network_all = readRDS(url(
+    "https://zenodo.org/record/10229222/files/lr_network_mouse_allInfo_30112033.rds"
+    )) %>% 
+    mutate(
+      ligand = convert_alias_to_symbols(ligand, organism = organism), 
+      receptor = convert_alias_to_symbols(receptor, organism = organism))
+  
+  lr_network_all = lr_network_all  %>% 
+    mutate(ligand = make.names(ligand), receptor = make.names(receptor)) 
+  lr_network = lr_network_all %>% 
+    distinct(ligand, receptor)
+  
+  ligand_target_matrix = readRDS(url(
+    "https://zenodo.org/record/7074291/files/ligand_target_matrix_nsga2r_final_mouse.rds"
+    ))
+  
+  colnames(ligand_target_matrix) = colnames(ligand_target_matrix) %>% 
+    convert_alias_to_symbols(organism = organism) %>% make.names()
+  rownames(ligand_target_matrix) = rownames(ligand_target_matrix) %>% 
+    convert_alias_to_symbols(organism = organism) %>% make.names()
+  
+  lr_network = lr_network %>% filter(ligand %in% colnames(ligand_target_matrix))
+  ligand_target_matrix = ligand_target_matrix[, lr_network$ligand %>% unique()]
+  
+}
+```
+
+# Defining sender and receiver cell types for communication modeling
+The lists of sender and receiver cell types are updated to exclude those absent or condition-specific, if necessary.
+```{r}
+senders_oi = SummarizedExperiment::colData(SAB.sce)[,celltype_id] %>% unique()
+receivers_oi = SummarizedExperiment::colData(SAB.sce)[,celltype_id] %>% unique()
+SAB.sce = SAB.sce[, SummarizedExperiment::colData(SAB.sce)[,celltype_id] %in% 
+            c(senders_oi, receivers_oi)
+          ]
+
+if(analyse_condition_specific_celltypes == TRUE){
+  senders_oi = senders_oi %>% setdiff(absent_celltypes)
+  receivers_oi = receivers_oi %>% setdiff(absent_celltypes)
+} else {
+  senders_oi = senders_oi %>% 
+    setdiff(union(absent_celltypes, condition_specific_celltypes))
+  receivers_oi = receivers_oi %>% 
+    setdiff(union(absent_celltypes, condition_specific_celltypes))
+}
+
+SAB.sce = SAB.sce[, SummarizedExperiment::colData(SAB.sce)[,celltype_id] %in% 
+            c(senders_oi, receivers_oi)
+          ]
+```
+
+# Combining abundance and expression information
+This step prepares the main data object integrating all relevant information for downstream MultiNicheNet analysis.
+```{r}
+gc()
+abundance_expression_info <- process_abundance_expression_info(
+  sce = SAB.sce, 
+  sample_id = sample_id, group_id = group_id, celltype_id = celltype_id, 
+  min_cells = min_cells, 
+  senders_oi = senders_oi, receivers_oi = receivers_oi, 
+  lr_network = lr_network, 
+  batches = batches, 
+  frq_list = frq_list, 
+  abundance_info = abundance_info)
+```
+
+```{r}
+abundance_expression_info$celltype_info$pb_df %>% head()
+```
+
+```{r}
+abundance_expression_info$celltype_info$pb_df_group %>% head()
+```
+
+```{r}
+abundance_expression_info$sender_receiver_info$pb_df %>% head()
+abundance_expression_info$sender_receiver_info$pb_df_group %>% head()
+```
+
+# Running differential expression (DE) analysis per cell type
+The get_DE_info function is used to compute DE genes across conditions for each cell type, leveraging the setup defined earlier.
+```{r}
+DE_info = get_DE_info(
+  sce = SAB.sce, 
+  sample_id = sample_id, group_id = group_id, celltype_id = celltype_id, 
+  batches = batches, covariates = covariates, 
+  contrasts_oi = contrasts_oi, 
+  min_cells = min_cells, 
+  expressed_df = frq_list$expressed_df)
+```
+
+```{r}
+DE_info$celltype_de$de_output_tidy %>% head()
+```
+
+Evaluate the distributions of p-values:
+```{r}
+DE_info$hist_pvals
+```
+
+These distributions look fine (uniform distribution, except peak at p-value <= 0.05), so we will continue using these regular p-values. In case these p-value distributions look irregular, you can estimate empirical p-values as we will demonstrate in another vignette.
+
+```{r}
+empirical_pval = FALSE
+```
+
+```{r}
+if(empirical_pval == TRUE){
+  DE_info_emp = get_empirical_pvals(DE_info$celltype_de$de_output_tidy)
+  celltype_de = DE_info_emp$de_output_tidy_emp %>% select(-p_val, -p_adj) %>% 
+    rename(p_val = p_emp, p_adj = p_adj_emp)
+} else {
+  celltype_de = DE_info$celltype_de$de_output_tidy
+} 
+```
+
+# Combine DE information for ligand-senders and receptors-receivers
+To end this step, we will combine the DE information of senders and receivers by linking their ligands and receptors together based on the prior knowledge ligand-receptor network.
+```{r}
+sender_receiver_de = combine_sender_receiver_de(
+  sender_de = celltype_de,
+  receiver_de = celltype_de,
+  senders_oi = senders_oi,
+  receivers_oi = receivers_oi,
+  lr_network = lr_network
+)
+```
+
+```{r}
+sender_receiver_de %>% head(20)
+```
+
+# Interpreting the MultiNicheNet analysis output
+
+## Necessary code to be able to use downstream plotting function without having run the entire MultiNicheNet pipeline
+```{r}
+sample_prioritization_tbl = abundance_expression_info$abundance_data_receiver  
+sample_prioritization_tbl$n_cells_receiver[is.na(sample_prioritization_tbl$n_cells_receiver)] = 0
+sample_prioritization_tbl$keep_receiver[is.na(sample_prioritization_tbl$keep_receiver)] = 0
+
+prioritization_tables = list(sample_prioritization_tbl = sample_prioritization_tbl)
+```
+
+Finally, we will save the DE results for each cluster in separate CSV files.
+```{r}
+library(dplyr)
+library(purrr)
+library(readr)
+
+# Get unique cluster IDs
+clusters <- unique(DE_info$celltype_de$de_output_tidy$cluster_id)
+
+# Output directory
+out_dir <- "output_dir"
+dir.create(out_dir, showWarnings = FALSE)
+
+# Loop over clusters
+walk(clusters, function(cl) {
+  # Subset DE results for this cluster
+  df <- DE_info$celltype_de$de_output_tidy %>%
+    filter(cluster_id == cl, contrast == "yes-no")
+
+  # Upregulated
+  up_df <- df %>%
+    filter(logFC > 0) %>%
+    arrange(p_adj)
+
+  # Downregulated
+  down_df <- df %>%
+    filter(logFC < 0) %>%
+    arrange(p_adj)
+
+  # Save if not empty
+  if (nrow(up_df) > 0) {
+    write_csv(up_df, file.path(out_dir, paste0("DE_upregulated_", cl, ".csv")))
+  }
+  if (nrow(down_df) > 0) {
+    write_csv(down_df, file.path(out_dir, paste0("DE_downregulated_", cl, ".csv")))
+  }
+})
+
+```
+
+
+# Generating volcano plots per cell type
+
+For each cluster, volcano plots of differentially expressed genes are generated, highlighting significantly up- and downregulated genes.
+```{r}
+library(tidyverse)
+library(ggrepel)
+
+# Set working directory
+setwd()
+
+# List all CSV files
+all_files <- list.files(pattern = "*.csv")
+
+# Extract unique cell types
+celltypes <- unique(gsub("DE_(upregulated|downregulated)_|\\.csv", "", all_files))
+
+for (ct in celltypes) {
+  up_file <- paste0("DE_upregulated_", ct, ".csv")
+  down_file <- paste0("DE_downregulated_", ct, ".csv")
+
+  if (!(up_file %in% all_files && down_file %in% all_files)) next
+
+  # Read and combine
+  df_up <- read_csv(up_file, show_col_types = FALSE)
+  df_down <- read_csv(down_file, show_col_types = FALSE)
+  markers_disease <- bind_rows(df_up, df_down)
+
+  # Add direction for color mapping
+  markers_disease <- markers_disease %>%
+    mutate(direction = case_when(
+      p_adj < 0.05 & logFC > 0 ~ "Upregulated",
+      p_adj < 0.05 & logFC < 0 ~ "Downregulated",
+      TRUE ~ "Not significant"
+    ))
+
+  # Count DE genes
+  n_DE <- sum(markers_disease$p_adj < 0.05)
+
+  # Top 20 for labeling
+  top_genes <- markers_disease %>%
+    arrange(p_adj) %>%
+    slice_head(n = 20)
+
+  # Volcano plot
+  volcano_plot <- ggplot(markers_disease, aes(x = logFC, y = -log10(p_adj))) +
+    geom_point(aes(color = direction), alpha = 0.7) +
+    geom_text_repel(data = top_genes, aes(label = gene), size = 3, max.overlaps = 900) +
+    scale_color_manual(values = c(
+      "Upregulated" = "firebrick",
+      "Downregulated" = "steelblue",
+      "Not significant" = "grey60"
+    )) +
+    theme_minimal(base_size = 12) +
+    xlab("Log2 Fold Change") +
+    ylab("-Log10 Adjusted P-value") +
+    ggtitle(paste0("Volcano Plot (", ct, ") - DE Genes: ", n_DE)) +
+    theme(
+      plot.title = element_text(hjust = 0.5, face = "bold"),
+      axis.line = element_line(color = "black"),
+      panel.grid = element_blank(),
+      panel.border = element_blank(),
+      axis.ticks = element_line()
+    )
+
+  # Save
+  ggsave(
+    filename = paste0("volcano_top_20_", ct, ".jpeg"),
+    plot = volcano_plot,
+    width = 8,
+    height = 6,
+    dpi = 600,
+    units = "in"
+  )
+}
+
+
+```
+
+
+# Generating combined volcano plots across all cell types
+
+All volcano plots are assembled into a composite figure for comparative visualization across cell types.
+```{r}
+library(tidyverse)
+library(ggpubr)
+
+# Set working directory
+setwd()
+
+all_files <- list.files(pattern = "*.csv")
+celltypes <- unique(gsub("DE_(upregulated|downregulated)_|\\.csv", "", all_files))
+
+plot_list <- list()
+
+for (ct in celltypes) {
+  up_file <- paste0("DE_upregulated_", ct, ".csv")
+  down_file <- paste0("DE_downregulated_", ct, ".csv")
+  if (!(up_file %in% all_files && down_file %in% all_files)) next
+
+  df_up <- read_csv(up_file, show_col_types = FALSE)
+  df_down <- read_csv(down_file, show_col_types = FALSE)
+  markers_disease <- bind_rows(df_up, df_down)
+
+  markers_disease <- markers_disease %>%
+    mutate(direction = case_when(
+      p_adj < 0.05 & logFC > 0 ~ "Upregulated",
+      p_adj < 0.05 & logFC < 0 ~ "Downregulated",
+      TRUE ~ "Not significant"
+    ))
+
+  n_DE <- sum(markers_disease$p_adj < 0.05)
+
+  p <- ggplot(markers_disease, aes(x = logFC, y = -log10(p_adj))) +
+    geom_point(aes(color = direction), alpha = 0.7) +
+    scale_color_manual(values = c(
+      "Upregulated" = "firebrick",
+      "Downregulated" = "steelblue",
+      "Not significant" = "grey60"
+    )) +
+    theme_minimal(base_size = 10) +
+    xlab("Log2 Fold Change") +
+    ylab("-Log10 Adjusted P-value") +
+    ggtitle(paste0(ct, "\nDE genes: ", n_DE)) +
+    theme(
+      plot.title = element_text(hjust = 0.5, face = "bold", size = 10),
+      axis.line = element_line(color = "black"),
+      panel.grid = element_blank(),
+      panel.border = element_blank(),
+      axis.ticks = element_line(),
+      legend.position = "none"
+    )
+
+  plot_list[[ct]] <- p
+}
+
+# Arrange all plots in a grid
+combined_plot <- ggarrange(plotlist = plot_list, ncol = 3, nrow = ceiling(length(plot_list)/3))
+
+# Save combined plot
+ggsave("volcano_combined_all_celltypes.jpeg", combined_plot, width = 12, height = length(plot_list) + 4, dpi = 600, units = "in")
+```
+
+```{r}
+sessionInfo()
+```
+
+

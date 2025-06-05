@@ -1,0 +1,484 @@
+
+```{r}
+# Load in recuired libraries
+library(ggplot2)
+library(ggalluvial)
+library(Seurat)
+library(dplyr)
+library(forcats)
+library(tidyr)
+library(pheatmap)
+library(tibble)
+library(RColorBrewer)
+library(Matrix)
+library(clue)
+```
+
+```{r}
+# Load in the object
+SAB <- readRDS("SAB.rds")
+```
+
+# Sankey plot annotation complete
+```{r}
+# Column names in metadata
+col1 <- "predicted.celltype.l2"
+col2 <- "Triana_celltype_integrated"
+
+# Create contingency table
+sankey_data <- as.data.frame(table(
+  Annotation1 = SAB@meta.data[[col1]],
+  Annotation2 = SAB@meta.data[[col2]]
+)) %>%
+  filter(Freq > 0)
+
+# Define how many top levels to keep
+top_annotation1 <- sankey_data %>%
+  group_by(Annotation1) %>%
+  summarise(total = sum(Freq), .groups = "drop") %>%
+  slice_max(total, n = 22) %>%
+  pull(Annotation1) %>%
+  as.character()
+
+top_annotation2 <- sankey_data %>%
+  group_by(Annotation2) %>%
+  summarise(total = sum(Freq), .groups = "drop") %>%
+  slice_max(total, n = 16) %>%
+  pull(Annotation2) %>%
+  as.character()
+
+# Collapse low-frequency labels into "Other celltypes"
+sankey_data <- sankey_data %>%
+  mutate(
+    Annotation1 = fct_other(as.character(Annotation1), keep = top_annotation1, other_level = "Other celltypes"),
+    Annotation2 = fct_other(as.character(Annotation2), keep = top_annotation2, other_level = "Other celltypes")
+  )
+
+# Reorder with "Other celltypes" at the top
+annotation1_order <- sankey_data %>%
+  group_by(Annotation1) %>%
+  summarise(total = sum(Freq), .groups = "drop") %>%
+  mutate(Annotation1 = as.character(Annotation1)) %>%
+  arrange(desc(Annotation1 == "Other celltypes"), total) %>%
+  pull(Annotation1)
+
+annotation2_order <- sankey_data %>%
+  group_by(Annotation2) %>%
+  summarise(total = sum(Freq), .groups = "drop") %>%
+  mutate(Annotation2 = as.character(Annotation2)) %>%
+  arrange(desc(Annotation2 == "Other celltypes"), total) %>%
+  pull(Annotation2)
+
+# Apply factor levels
+sankey_data$Annotation1 <- factor(sankey_data$Annotation1, levels = annotation1_order)
+sankey_data$Annotation2 <- factor(sankey_data$Annotation2, levels = annotation2_order)
+
+# Plot the Sankey diagram
+ggplot(sankey_data,
+       aes(axis1 = Annotation1, axis2 = Annotation2, y = Freq)) +
+  geom_alluvium(aes(fill = Annotation1), width = 1/12) +
+  geom_stratum(width = 1/12, fill = "grey80", color = "black") +
+  geom_text(stat = "stratum",
+            aes(label = ifelse(after_stat(count) >= 10, as.character(after_stat(stratum)), "")),
+            size = 2.5) +
+  scale_x_discrete(labels = c("predicted.celltype.l2" = "Azimuth Celltypes",
+                              "Triana_celltype" = "Triana Celltypes"),
+                   limits = c("predicted.celltype.l2", "Triana_celltype"),
+                   expand = c(.05, .05)) +
+  labs(title = "Mapping Between Azimuth and Triana integrated Celltypes") +
+  theme_minimal() +
+  theme(
+    axis.title.y = element_blank(),
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank(),
+    plot.title = element_text(hjust = 0.5, size = 16, face = "bold")
+  ) +
+  NoLegend()
+
+```
+
+```{r}
+ggsave("Sankeyplot_Azimuth_vs_Triana_integrated.jpeg", width = 15, height = 10, units = "in", dpi = 300)
+```
+
+
+# Sankey plot per experiment individually
+```{r}
+# Column names
+col1 <- "predicted.celltype.l2"
+col2 <- "Triana_celltype"
+
+# Loop through each unique 'exp' value
+for (exp_value in unique(SAB@meta.data$exp)) {
+  
+  # Subset metadata for the current exp group
+  meta_subset <- SAB@meta.data[SAB@meta.data$exp == exp_value, ]
+  
+  # Create contingency table
+  sankey_data <- as.data.frame(table(
+    Annotation1 = meta_subset[[col1]],
+    Annotation2 = meta_subset[[col2]]
+  )) %>%
+    filter(Freq > 0)
+  
+  # Skip if no data
+  if (nrow(sankey_data) == 0) next
+  
+  # Define top N cell types to keep
+  top_annotation1 <- sankey_data %>%
+    group_by(Annotation1) %>%
+    summarise(total = sum(Freq), .groups = "drop") %>%
+    slice_max(total, n = 22) %>%
+    pull(Annotation1) %>%
+    as.character()
+  
+  top_annotation2 <- sankey_data %>%
+    group_by(Annotation2) %>%
+    summarise(total = sum(Freq), .groups = "drop") %>%
+    slice_max(total, n = 16) %>%
+    pull(Annotation2) %>%
+    as.character()
+  
+  # Collapse low-frequency labels
+  sankey_data <- sankey_data %>%
+    mutate(
+      Annotation1 = fct_other(as.character(Annotation1), keep = top_annotation1, other_level = "Other celltypes"),
+      Annotation2 = fct_other(as.character(Annotation2), keep = top_annotation2, other_level = "Other celltypes")
+    )
+  
+  # Reorder with "Other celltypes" at the top
+  annotation1_order <- sankey_data %>%
+    group_by(Annotation1) %>%
+    summarise(total = sum(Freq), .groups = "drop") %>%
+    mutate(Annotation1 = as.character(Annotation1)) %>%
+    arrange(desc(Annotation1 == "Other celltypes"), total) %>%
+    pull(Annotation1)
+  
+  annotation2_order <- sankey_data %>%
+    group_by(Annotation2) %>%
+    summarise(total = sum(Freq), .groups = "drop") %>%
+    mutate(Annotation2 = as.character(Annotation2)) %>%
+    arrange(desc(Annotation2 == "Other celltypes"), total) %>%
+    pull(Annotation2)
+  
+  sankey_data$Annotation1 <- factor(sankey_data$Annotation1, levels = annotation1_order)
+  sankey_data$Annotation2 <- factor(sankey_data$Annotation2, levels = annotation2_order)
+  
+  # Plot
+  p <- ggplot(sankey_data,
+              aes(axis1 = Annotation1, axis2 = Annotation2, y = Freq)) +
+    geom_alluvium(aes(fill = Annotation1), width = 1/12) +
+    geom_stratum(width = 1/12, fill = "grey80", color = "black") +
+    geom_text(stat = "stratum",
+              aes(label = ifelse(after_stat(count) >= 10, as.character(after_stat(stratum)), "")),
+              size = 2.5) +
+    scale_x_discrete(labels = c("predicted.celltype.l2" = "Azimuth Celltypes",
+                                "Triana_celltype" = "Triana Celltypes"),
+                     limits = c("predicted.celltype.l2", "Triana_celltype"),
+                     expand = c(.05, .05)) +
+    labs(title = paste("Mapping Between Azimuth and Triana Celltypes:", exp_value)) +
+    theme_minimal() +
+    theme(
+      axis.title.y = element_blank(),
+      axis.text.y = element_blank(),
+      axis.ticks.y = element_blank(),
+      plot.title = element_text(hjust = 0.5, size = 16, face = "bold")
+    ) +
+    NoLegend()
+  
+  # Save plot
+  ggsave(
+    filename = paste0("sankey_", gsub("[^a-zA-Z0-9]", "_", exp_value), ".jpg"),
+    plot = p,
+    width = 10,
+    height = 6,
+    dpi = 300
+  )
+}
+
+```
+
+# Sankey per experiment with no "Other" grouping
+```{r}
+# Column names
+col1 <- "predicted.celltype.l2"
+col2 <- "Triana_celltype"
+
+# Loop through each unique 'exp' value
+for (exp_value in unique(SAB@meta.data$exp)) {
+  
+  # Subset metadata for the current exp group
+  meta_subset <- SAB@meta.data[SAB@meta.data$exp == exp_value, ]
+  
+  # Create contingency table
+  sankey_data <- as.data.frame(table(
+    Annotation1 = meta_subset[[col1]],
+    Annotation2 = meta_subset[[col2]]
+  )) %>%
+    filter(Freq > 0)
+  
+  # Skip if no data
+  if (nrow(sankey_data) == 0) next
+  
+  # Define top N cell types to keep
+  top_annotation1 <- sankey_data %>%
+    group_by(Annotation1) %>%
+    summarise(total = sum(Freq), .groups = "drop") %>%
+    slice_max(total, n = 22) %>%
+    pull(Annotation1) %>%
+    as.character()
+  
+  top_annotation2 <- sankey_data %>%
+    group_by(Annotation2) %>%
+    summarise(total = sum(Freq), .groups = "drop") %>%
+    slice_max(total, n = 16) %>%
+    pull(Annotation2) %>%
+    as.character()
+  
+  # Reorder by frequency (no "Other" grouping)
+  annotation1_order <- sankey_data %>%
+    group_by(Annotation1) %>%
+    summarise(total = sum(Freq), .groups = "drop") %>%
+    arrange(total) %>%
+    pull(Annotation1)
+  
+  annotation2_order <- sankey_data %>%
+    group_by(Annotation2) %>%
+    summarise(total = sum(Freq), .groups = "drop") %>%
+    arrange(total) %>%
+    pull(Annotation2)
+
+  
+  sankey_data$Annotation1 <- factor(sankey_data$Annotation1, levels = annotation1_order)
+  sankey_data$Annotation2 <- factor(sankey_data$Annotation2, levels = annotation2_order)
+  
+  # Plot
+  p <- ggplot(sankey_data,
+              aes(axis1 = Annotation1, axis2 = Annotation2, y = Freq)) +
+    geom_alluvium(aes(fill = Annotation1), width = 1/12) +
+    geom_stratum(width = 1/12, fill = "grey80", color = "black") +
+    geom_text(stat = "stratum",
+              aes(label = ifelse(after_stat(count) >= 10, as.character(after_stat(stratum)), "")),
+              size = 1.5) +
+    scale_x_discrete(labels = c("predicted.celltype.l2" = "Azimuth Celltypes",
+                                "Triana_celltype" = "Triana Celltypes"),
+                     limits = c("predicted.celltype.l2", "Triana_celltype"),
+                     expand = c(.05, .05)) +
+    labs(title = paste("Mapping Between Azimuth and Triana Celltypes:", exp_value)) +
+    theme_minimal() +
+    theme(
+      axis.title.y = element_blank(),
+      axis.text.y = element_blank(),
+      axis.ticks.y = element_blank(),
+      plot.title = element_text(hjust = 0.5, size = 16, face = "bold")
+    ) +
+    NoLegend()
+  
+  # Save plot
+  ggsave(
+    filename = paste0("sankey_Azimuth_vs_Triana_", gsub("[^a-zA-Z0-9]", "_", exp_value), ".jpg"),
+    plot = p,
+    width = 10,
+    height = 6,
+    dpi = 300
+  )
+}
+```
+
+# Jaccard Similarity matrix
+```{r}
+# Extract metadata
+cell_df <- SAB@meta.data %>%
+  select(predicted.celltype.l2, Triana_celltype) %>%
+  mutate(cell = rownames(SAB@meta.data)) %>%
+  filter(!is.na(predicted.celltype.l2), !is.na(Triana_celltype))
+
+# Unique labels
+azimuth_labels <- unique(cell_df$predicted.celltype.l2)
+triana_labels  <- unique(cell_df$Triana_celltype)
+
+# Initialize matrices
+jaccard_matrix <- matrix(0, nrow = length(azimuth_labels), ncol = length(triana_labels),
+                         dimnames = list(azimuth_labels, triana_labels))
+count_matrix <- matrix(0, nrow = length(azimuth_labels), ncol = length(triana_labels),
+                       dimnames = list(azimuth_labels, triana_labels))
+
+# Compute Jaccard and count
+for (a in azimuth_labels) {
+  a_cells <- cell_df$cell[cell_df$predicted.celltype.l2 == a]
+  for (t in triana_labels) {
+    t_cells <- cell_df$cell[cell_df$Triana_celltype == t]
+    intersection <- length(intersect(a_cells, t_cells))
+    union <- length(union(a_cells, t_cells))
+    jaccard_matrix[a, t] <- ifelse(union > 0, intersection / union, 0)
+    count_matrix[a, t] <- intersection
+  }
+}
+
+# Check matrix
+if (all(jaccard_matrix == 0)) stop("Jaccard matrix has no values.")
+
+# Hungarian algorithm
+nr <- nrow(jaccard_matrix)
+nc <- ncol(jaccard_matrix)
+max_dim <- max(nr, nc)
+square_matrix <- matrix(0, nrow = max_dim, ncol = max_dim)
+square_matrix[1:nr, 1:nc] <- jaccard_matrix
+assignment <- solve_LSAP(square_matrix, maximum = TRUE)
+valid_assignments <- assignment[1:nr]
+valid_assignments <- valid_assignments[valid_assignments <= nc]
+optimal_rows <- rownames(jaccard_matrix)[seq_along(valid_assignments)]
+optimal_cols <- colnames(jaccard_matrix)[valid_assignments]
+jaccard_ordered <- jaccard_matrix[optimal_rows, optimal_cols]
+count_ordered <- count_matrix[optimal_rows, optimal_cols]
+
+# Row-scaling
+jaccard_scaled <- t(apply(jaccard_ordered, 1, function(x) {
+  if (max(x) > 0) (x - min(x)) / (max(x) - min(x)) else x
+}))
+
+# Annotate with counts
+annotation_labels <- matrix(as.character(count_ordered), nrow = nrow(count_ordered))
+rownames(annotation_labels) <- rownames(jaccard_ordered)
+colnames(annotation_labels) <- colnames(jaccard_ordered)
+
+# Plot
+map <- pheatmap(jaccard_scaled,
+         main = "Jaccard Similarity heatmap between Azimuth and Triana annotations",
+         cluster_rows = FALSE,
+         cluster_cols = FALSE,
+         fontsize_row = 8,
+         fontsize_col = 8,
+         display_numbers = annotation_labels,
+         number_color = "black",
+         na_col = "grey90",
+         color = colorRampPalette(brewer.pal(9, "Blues"))(100))
+map
+
+```
+
+```{r}
+ggsave("Jaccard_Similarity_Azimuth_vs_Triana.jpg", plot = map, width = 15, height = 10, units = "in", dpi = 300)
+```
+
+# Regular heatmap between annotation
+```{r}
+# Prepare confusion matrix
+celltypes_df <- SAB@meta.data %>%
+  filter(!is.na(predicted.celltype.l2), !is.na(Triana_celltype)) %>%
+  select(predicted.celltype.l2, Triana_celltype)
+
+confusion_matrix <- table(celltypes_df$predicted.celltype.l2,
+                          celltypes_df$Triana_celltype)
+confusion_matrix <- as.matrix(confusion_matrix)
+
+# Pad to square matrix
+n_rows <- nrow(confusion_matrix)
+n_cols <- ncol(confusion_matrix)
+max_dim <- max(n_rows, n_cols)
+
+square_matrix <- matrix(0, nrow = max_dim, ncol = max_dim)
+square_matrix[1:n_rows, 1:n_cols] <- confusion_matrix
+
+# Solve LSAP (Hungarian algorithm to maximize diagonal)
+assignment <- solve_LSAP(square_matrix, maximum = TRUE)
+
+# Extract valid assignments that fall within matrix dimensions
+# Map: row i -> col assignment[i]
+valid_pairs <- which(assignment[1:n_rows] <= n_cols)
+
+row_order <- seq_len(n_rows)[valid_pairs]
+col_order <- as.vector(assignment)[valid_pairs]
+
+# Subset and reorder the original confusion matrix
+reordered_matrix <- confusion_matrix[row_order, col_order]
+
+# Annotate with cell counts
+annotation_labels <- matrix(as.character(reordered_matrix),
+                            nrow = nrow(reordered_matrix),
+                            ncol = ncol(reordered_matrix),
+                            dimnames = list(rownames(confusion_matrix)[row_order],
+                                            colnames(confusion_matrix)[col_order]))
+
+# Plot heatmap
+map <- pheatmap(reordered_matrix,
+         scale = "row",
+         display_numbers = annotation_labels,
+         cluster_rows = FALSE,
+         cluster_cols = FALSE,
+         fontsize_row = 8,
+         fontsize_col = 8,
+         fontsize_number = 6,
+         number_color = "black",
+         main = "Heatmap Azimuth vs Triana annotation",
+         color = colorRampPalette(brewer.pal(9, "Blues"))(100))
+
+map
+
+# Save
+ggsave("Heatmap_Azimuth_vs_Triana_annotation.jpg", plot = map, width = 15, height = 10, units = "in", dpi = 300)
+```
+
+```{r}
+# Extract and convert metadata properly
+meta_tbl <- as.data.frame(SAB@meta.data)
+
+# Check for Patient column
+if (!"Patient" %in% colnames(meta_tbl)) stop("Column 'Patient' not found in SAB@meta.data.")
+
+# Detect clustering column
+snn_col <- grep("RNA_harmony_clusters", colnames(meta_tbl), value = TRUE)[1]
+if (is.null(snn_col)) stop("No RNA_harmony_clusters column found in metadata.")
+
+# Create count table
+cluster_patient_table <- meta_tbl %>%
+  filter(!is.na(.data[[snn_col]]), !is.na(Patient)) %>%
+  mutate(Cluster = .data[[snn_col]]) %>%
+  dplyr::count(Cluster, Patient) %>%
+  pivot_wider(names_from = Patient, values_from = n, values_fill = 0)
+
+# Build heatmap matrix
+heatmap_matrix <- cluster_patient_table %>%
+  mutate(Cluster = as.numeric(as.character(Cluster))) %>%
+  arrange(Cluster) %>%
+  column_to_rownames("Cluster") %>%
+  as.matrix()
+
+# Get current column names from the matrix
+patients <- colnames(heatmap_matrix)
+
+# Detect columns starting with "HC" and "AML"
+hc_cols <- grep("^HC", patients, value = TRUE)
+aml_cols <- grep("^AML", patients, value = TRUE)
+
+# Combine: HC first, AML sorted after
+hc_first_order <- c(sort(hc_cols), sort(aml_cols))
+
+# Safety check for missing values
+hc_first_order <- intersect(hc_first_order, colnames(heatmap_matrix))
+
+# Reorder matrix
+heatmap_matrix <- heatmap_matrix[, hc_first_order]
+
+# Create annotation labels
+annotation_labels <- matrix(as.character(heatmap_matrix), nrow = nrow(heatmap_matrix))
+rownames(annotation_labels) <- rownames(heatmap_matrix)
+colnames(annotation_labels) <- colnames(heatmap_matrix)
+
+# Plot heatmap
+map <- pheatmap(heatmap_matrix,
+                main = paste("Heatmap of Cluster (", snn_col, ") vs Patient"),
+                cluster_rows = FALSE,
+                cluster_cols = FALSE,
+                fontsize_row = 8,
+                fontsize_col = 8,
+                scale = "row",
+                display_numbers = annotation_labels,
+                number_color = "black",
+                na_col = "grey90",
+                color = colorRampPalette(brewer.pal(9, "Blues"))(100))
+
+
+ggsave("Heatmap_cluster_vs_Patient_harmony.jpg", plot = map, width = 15, height = 10, units = "in", dpi = 300)
+
+```

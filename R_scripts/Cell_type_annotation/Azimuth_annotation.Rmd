@@ -1,0 +1,366 @@
+
+```{r}
+library(Seurat)
+library(Azimuth)
+library(ggplot2)
+```
+
+# Load in SAB001
+```{r}
+setwd("~/data/Master_dissertation/Processed_SCC/PROCESSED")
+filename <- "./SAB001/SAB001_reseq/SAB001_reseq_seurat.rds"
+SAB001 <- readRDS(filename)
+SAB001 <- RunAzimuth(SAB001, reference="bonemarrowref")
+setwd("~/data/Master_dissertation/Processed_SCC")
+save(SAB001, file="~/data/Master_dissertation/Processed_SCC/SAB001_annotated.rds")
+```
+
+# Load SAB002
+```{r}
+setwd("~/data/Master_dissertation/Processed_SCC/PROCESSED")
+filename <- "./SAB002/SAB002_reseq/SAB002_reseq_seurat.rds"
+SAB002 <- readRDS(filename)
+SAB002 <- RunAzimuth(SAB002, reference="bonemarrowref")
+setwd("~/data/Master_dissertation/Processed_SCC")
+save(SAB001, file="~/data/Master_dissertation/Processed_SCC/SAB002_annotated.rds")
+```
+
+# Load SAB003
+```{r}
+setwd("~/data/Master_dissertation/Processed_SCC/PROCESSED")
+filename <- "~/data/Master_dissertation/Processed_SCC/PROCESSED/SAB003/SAB003_reseq/SAB003_reseq_seurat.rds"
+SAB003 <- readRDS(filename)
+SAB003 <- RunAzimuth(SAB003, reference="bonemarrowref")
+setwd("~/data/Master_dissertation/Processed_SCC")
+save(SAB003, file="~/data/Master_dissertation/Processed_SCC/SAB003_annotated.rds")
+rm(SAB003)
+```
+
+# Load SAB004
+```{r}
+setwd("~/data/Master_dissertation/Processed_SCC/PROCESSED")
+filename <- "~/data/Master_dissertation/Processed_SCC/PROCESSED/SAB004/SAB004_reseq/SAB004_reseq_seurat.rds"
+SAB004 <- readRDS(filename)
+SAB004 <- RunAzimuth(SAB004, reference="bonemarrowref")
+setwd("~/data/Master_dissertation/Processed_SCC")
+save(SAB004, file="~/data/Master_dissertation/Processed_SCC/SAB004_annotated.rds")
+rm(SAB004)
+```
+
+# Load SAB005
+```{r}
+setwd("~/data/Master_dissertation/Processed_SCC/PROCESSED")
+filename <- "~/data/Master_dissertation/Processed_SCC/PROCESSED/SAB005/SAB005_reseq/SAB005_reseq_seurat.rds"
+SAB005 <- readRDS(filename)
+SAB005 <- RunAzimuth(SAB005, reference="bonemarrowref")
+setwd("~/data/Master_dissertation/Processed_SCC")
+save(SAB005, file="~/data/Master_dissertation/Processed_SCC/SAB005_annotated.rds")
+rm(SAB005)
+```
+
+# Load SAB006
+```{r}
+setwd("~/data/Master_dissertation/Processed_SCC/PROCESSED")
+filename <- "~/data/Master_dissertation/Processed_SCC/PROCESSED/SAB006/SAB006_reseq/SAB006_reseq_seurat.rds"
+SAB006 <- readRDS(filename)
+SAB006 <- RunAzimuth(SAB006, reference="pbmcref")
+setwd("~/data/Master_dissertation/Processed_SCC")
+save(SAB006, file="~/data/Master_dissertation/Processed_SCC/SAB006_annotated.rds")
+rm(SAB006)
+```
+
+# Load SAB007
+```{r}
+setwd("~/data/Master_dissertation/Processed_SCC/PROCESSED")
+filename <- "~/data/Master_dissertation/Processed_SCC/PROCESSED/SAB007/SAB007_reseq/SAB007_reseq_seurat.rds"
+SAB007 <- readRDS(filename)
+SAB007 <- RunAzimuth(SAB007, reference="pbmcref")
+setwd("~/data/Master_dissertation/Processed_SCC")
+save(SAB007, file="~/data/Master_dissertation/Processed_SCC/SAB007_annotated.rds")
+rm(SAB007)
+```
+
+# Load SAB008
+```{r}
+setwd("~/data/Master_dissertation/Processed_SCC/PROCESSED")
+filename <- "~/data/Master_dissertation/Processed_SCC/PROCESSED/SAB008/SAB008_reseq/SAB008_reseq_seurat.rds"
+SAB008 <- readRDS(filename)
+SAB008 <- RunAzimuth(SAB008, reference="bonemarrowref")
+setwd("~/data/Master_dissertation/Processed_SCC")
+save(SAB008, file="~/data/Master_dissertation/Processed_SCC/SAB008_annotated.rds")
+rm(SAB008)
+```
+
+# Load SAB009
+```{r}
+setwd("~/data/Master_dissertation/Processed_SCC/PROCESSED")
+filename <- "~/data/Master_dissertation/Processed_SCC/PROCESSED/SAB009/SAB009_reseq/SAB009_reseq_seurat.rds"
+SAB009 <- readRDS(filename)
+SAB009 <- RunAzimuth(SAB009, reference="bonemarrowref")
+setwd("~/data/Master_dissertation/Processed_SCC")
+save(SAB009, file="~/data/Master_dissertation/Processed_SCC/SAB009_annotated.rds")
+rm(SAB009)
+```
+
+# Load SAB010
+```{r}
+setwd("~/data/Master_dissertation/Processed_SCC/PROCESSED")
+filename <- "~/data/Master_dissertation/Processed_SCC/PROCESSED/SAB010/SAB010_reseq/SAB010_reseq_seurat.rds"
+SAB010 <- readRDS(filename)
+SAB010 <- RunAzimuth(SAB010, reference="bonemarrowref")
+setwd("~/data/Master_dissertation/Processed_SCC")
+save(SAB010, file="~/data/Master_dissertation/Processed_SCC/SAB010_annotated.rds")
+rm(SAB010)
+```
+
+# Load SAB011
+```{r}
+setwd("~/data/Master_dissertation/Processed_SCC/PROCESSED")
+filename <- "~/data/Master_dissertation/Processed_SCC/PROCESSED/SAB011/SAB011/SAB011_seurat.rds"
+SAB011 <- readRDS(filename)
+SAB011 <- RunAzimuth(SAB011, reference="pbmcref")
+setwd("~/data/Master_dissertation/Processed_SCC")
+save(SAB011, file="~/data/Master_dissertation/Processed_SCC/SAB011_annotated.rds")
+rm(SAB011)
+```
+
+# Load SAB012
+```{r}
+setwd("~/data/Master_dissertation/Processed_SCC/PROCESSED")
+filename <- "~/data/Master_dissertation/Processed_SCC/PROCESSED/SAB012/SAB012/SAB012_seurat.rds"
+SAB012 <- readRDS(filename)
+SAB012 <- RunAzimuth(SAB012, reference="bonemarrowref")
+setwd("~/data/Master_dissertation/Processed_SCC")
+save(SAB012, file="~/data/Master_dissertation/Processed_SCC/SAB012_annotated.rds")
+rm(SAB012)
+```
+
+# Load SAB013
+```{r}
+setwd("~/data/Master_dissertation/Processed_SCC/PROCESSED")
+filename <- "~/data/Master_dissertation/Processed_SCC/PROCESSED/SAB013/SAB013_reseq/SAB013_reseq_seurat.rds"
+SAB013 <- readRDS(filename)
+SAB013 <- RunAzimuth(SAB013, reference="bonemarrowref")
+setwd("~/data/Master_dissertation/Processed_SCC")
+save(SAB013, file="~/data/Master_dissertation/Processed_SCC/SAB013_annotated.rds")
+rm(SAB013)
+```
+
+# Load SAB014
+```{r}
+setwd("~/data/Master_dissertation/Processed_SCC/PROCESSED")
+filename <- "~/data/Master_dissertation/Processed_SCC/PROCESSED/SAB014/SAB014_reseq/SAB014_reseq_seurat.rds"
+SAB014 <- readRDS(filename)
+SAB014 <- RunAzimuth(SAB014, reference="bonemarrowref")
+setwd("~/data/Master_dissertation/Processed_SCC")
+save(SAB014, file="~/data/Master_dissertation/Processed_SCC/SAB014_annotated.rds")
+rm(SAB014)
+```
+
+# Load SAB015
+```{r}
+setwd("~/data/Master_dissertation/Processed_SCC/PROCESSED")
+filename <- "~/data/Master_dissertation/Processed_SCC/PROCESSED/SAB015/SAB015/SAB015_seurat.rds"
+SAB015 <- readRDS(filename)
+SAB015 <- RunAzimuth(SAB015, reference="bonemarrowref")
+setwd("~/data/Master_dissertation/Processed_SCC")
+save(SAB015, file="~/data/Master_dissertation/Processed_SCC/SAB015_annotated.rds")
+rm(SAB015)
+```
+
+# Load SAB016
+```{r}
+setwd("~/data/Master_dissertation/Processed_SCC/PROCESSED")
+filename <- "~/data/Master_dissertation/Processed_SCC/PROCESSED/SAB016/SAB016/SAB016_seurat.rds"
+SAB016 <- readRDS(filename)
+SAB016 <- RunAzimuth(SAB016, reference="pbmcref")
+setwd("~/data/Master_dissertation/Processed_SCC")
+save(SAB016, file="~/data/Master_dissertation/Processed_SCC/SAB016_annotated.rds")
+rm(SAB016)
+```
+
+# Load SAB017
+```{r}
+setwd("~/data/Master_dissertation/Processed_SCC/PROCESSED")
+filename <- "~/data/Master_dissertation/Processed_SCC/PROCESSED/SAB017/SAB017/SAB017_seurat.rds"
+SAB017 <- readRDS(filename)
+SAB017 <- RunAzimuth(SAB017, reference="pbmcref")
+setwd("~/data/Master_dissertation/Processed_SCC")
+save(SAB017, file="~/data/Master_dissertation/Processed_SCC/SAB017_annotated.rds")
+rm(SAB017)
+```
+
+# Load SAB018
+```{r}
+setwd("~/data/Master_dissertation/Processed_SCC/PROCESSED")
+filename <- "~/data/Master_dissertation/Processed_SCC/PROCESSED/SAB018/SAB018/SAB018_seurat.rds"
+SAB018 <- readRDS(filename)
+SAB018 <- RunAzimuth(SAB018, reference="pbmcref")
+setwd("~/data/Master_dissertation/Processed_SCC")
+save(SAB018, file="~/data/Master_dissertation/Processed_SCC/SAB018_annotated.rds")
+rm(SAB018)
+```
+
+# Load SAB019
+```{r}
+filename <- "~/data/Master_dissertation/Processed_SCC/PROCESSED/SAB019/SAB019_reseq/SAB019_reseq_seurat.rds"
+SAB019 <- readRDS(filename)
+SAB019 <- RunAzimuth(SAB019, reference="pbmcref")
+save(SAB019, file="~/data/Master_dissertation/Processed_SCC/SAB019_annotated.rds")
+rm(SAB019)
+```
+
+# Load SAB020
+```{r}
+filename <- "~/data/Master_dissertation/Processed_SCC/PROCESSED/SAB020/SAB020/SAB020_seurat.rds"
+SAB020 <- readRDS(filename)
+SAB020 <- RunAzimuth(SAB020, reference="bonemarrowref")
+save(SAB020, file="~/data/Master_dissertation/Processed_SCC/SAB020_annotated.rds")
+rm(SAB020)
+```
+
+# Load SAB021
+```{r}
+filename <- "~/data/Master_dissertation/Processed_SCC/PROCESSED/SAB021/SAB021/SAB021_seurat.rds"
+SAB021 <- readRDS(filename)
+SAB021 <- RunAzimuth(SAB021, reference="pbmcref")
+save(SAB021, file="~/data/Master_dissertation/Processed_SCC/SAB021_annotated.rds")
+rm(SAB021)
+```
+
+# Load SAB022
+```{r}
+filename <- "~/data/Master_dissertation/Processed_SCC/PROCESSED/SAB022/SAB022/SAB022_seurat.rds"
+SAB022 <- readRDS(filename)
+SAB022 <- RunAzimuth(SAB022, reference="pbmcref")
+save(SAB022, file="~/data/Master_dissertation/Processed_SCC/SAB022_annotated.rds")
+rm(SAB022)
+```
+
+# Load SAB023
+```{r}
+filename <- "~/data/Master_dissertation/Processed_SCC/PROCESSED/SAB023/SAB023/SAB023_seurat.rds"
+SAB023 <- readRDS(filename)
+SAB023 <- RunAzimuth(SAB023, reference="pbmcref")
+save(SAB023, file="~/data/Master_dissertation/Processed_SCC/SAB023_annotated.rds")
+rm(SAB023)
+```
+
+# Load SAB024
+```{r}
+filename <- "~/data/Master_dissertation/Processed_SCC/PROCESSED/SAB024/SAB024/SAB024_seurat.rds"
+SAB024 <- readRDS(filename)
+SAB024 <- RunAzimuth(SAB024, reference="pbmcref")
+save(SAB024, file="~/data/Master_dissertation/Processed_SCC/SAB024_annotated.rds")
+rm(SAB024)
+```
+
+# Load SAB025
+```{r}
+setwd("~/data/Master_dissertation/Processed_SCC/PROCESSED")
+filename <- "~/data/Master_dissertation/Processed_SCC/PROCESSED/SAB025/SAB025/SAB025_seurat.rds"
+SAB025 <- readRDS(filename)
+SAB025 <- RunAzimuth(SAB025, reference="pbmcref")
+setwd("~/data/Master_dissertation/Processed_SCC")
+save(SAB025, file="~/data/Master_dissertation/Processed_SCC/SAB025_annotated.rds")
+rm(SAB025)
+```
+
+# Load SAB026
+```{r}
+setwd("~/data/Master_dissertation/Processed_SCC/PROCESSED")
+filename <- "~/data/Master_dissertation/Processed_SCC/PROCESSED/SAB026/SAB026/SAB026_seurat.rds"
+SAB026 <- readRDS(filename)
+SAB026 <- RunAzimuth(SAB026, reference="pbmcref")
+setwd("~/data/Master_dissertation/Processed_SCC")
+save(SAB026, file="~/data/Master_dissertation/Processed_SCC/SAB026_annotated.rds")
+rm(SAB026)
+```
+
+# Load SAB027
+```{r}
+setwd("~/data/Master_dissertation/Processed_SCC/PROCESSED")
+filename <- "~/data/Master_dissertation/Processed_SCC/PROCESSED/SAB027/SAB027/SAB027_seurat.rds"
+SAB027 <- readRDS(filename)
+SAB027 <- RunAzimuth(SAB027, reference="bonemarrowref")
+setwd("~/data/Master_dissertation/Processed_SCC")
+save(SAB027, file="~/data/Master_dissertation/Processed_SCC/SAB027_annotated.rds")
+rm(SAB027)
+```
+
+# Load SAB028
+```{r}
+setwd("~/data/Master_dissertation/Processed_SCC/PROCESSED")
+filename <- "~/data/Master_dissertation/Processed_SCC/PROCESSED/SAB028/SAB028/SAB028_seurat.rds"
+SAB028 <- readRDS(filename)
+SAB028 <- RunAzimuth(SAB028, reference="pbmcref")
+setwd("~/data/Master_dissertation/Processed_SCC")
+save(SAB028, file="~/data/Master_dissertation/Processed_SCC/SAB028_annotated.rds")
+rm(SAB028)
+```
+
+# Load SAB029
+```{r}
+setwd("~/data/Master_dissertation/Processed_SCC/PROCESSED")
+filename <- "~/data/Master_dissertation/Processed_SCC/PROCESSED/SAB029/SAB029/SAB029_seurat.rds"
+SAB029 <- readRDS(filename)
+SAB029 <- RunAzimuth(SAB029, reference="bonemarrowref")
+setwd("~/data/Master_dissertation/Processed_SCC")
+save(SAB029, file="~/data/Master_dissertation/Processed_SCC/SAB029_annotated.rds")
+rm(SAB029)
+```
+
+# Load SAB030
+```{r}
+setwd("~/data/Master_dissertation/Processed_SCC/PROCESSED")
+filename <- "~/data/Master_dissertation/Processed_SCC/PROCESSED/SAB030/SAB030/SAB030_seurat.rds"
+SAB030 <- readRDS(filename)
+SAB030 <- RunAzimuth(SAB030, reference="bonemarrowref")
+setwd("~/data/Master_dissertation/Processed_SCC")
+save(SAB030, file="~/data/Master_dissertation/Processed_SCC/SAB030_annotated.rds")
+rm(SAB030)
+```
+
+# Load SAB031
+```{r}
+setwd("~/data/Master_dissertation/Processed_SCC/PROCESSED")
+filename <- "~/data/Master_dissertation/Processed_SCC/PROCESSED/SAB031/SAB031/SAB031_seurat.rds"
+SAB031 <- readRDS(filename)
+SAB031 <- RunAzimuth(SAB031, reference="bonemarrowref")
+setwd("~/data/Master_dissertation/Processed_SCC")
+save(SAB031, file="~/data/Master_dissertation/Processed_SCC/SAB031_annotated.rds")
+rm(SAB031)
+```
+
+# Load SAB032
+```{r}
+setwd("~/data/Master_dissertation/Processed_SCC/PROCESSED")
+filename <- "~/data/Master_dissertation/Processed_SCC/PROCESSED/SAB032/SAB032/SAB032_seurat.rds"
+SAB032 <- readRDS(filename)
+SAB032 <- RunAzimuth(SAB032, reference="bonemarrowref")
+setwd("~/data/Master_dissertation/Processed_SCC")
+save(SAB032, file="~/data/Master_dissertation/Processed_SCC/SAB032_annotated.rds")
+rm(SAB032)
+```
+
+# Load SAB033
+```{r}
+setwd("~/data/Master_dissertation/Processed_SCC/PROCESSED")
+filename <- "~/data/Master_dissertation/Processed_SCC/PROCESSED/SAB033/SAB033/SAB033_seurat.rds"
+SAB033 <- readRDS(filename)
+SAB033 <- RunAzimuth(SAB033, reference="bonemarrowref")
+setwd("~/data/Master_dissertation/Processed_SCC")
+save(SAB033, file="~/data/Master_dissertation/Processed_SCC/SAB033_annotated.rds")
+rm(SAB033)
+```
+
+# Load SAB035
+```{r}
+setwd("~/data/Master_dissertation/Processed_SCC/PROCESSED")
+filename <- "~/data/Master_dissertation/Processed_SCC/PROCESSED/SAB035/SAB035/SAB035_seurat.rds"
+SAB035 <- readRDS(filename)
+SAB035 <- RunAzimuth(SAB035, reference="bonemarrowref")
+setwd("~/data/Master_dissertation/Processed_SCC")
+save(SAB035, file="~/data/Master_dissertation/Processed_SCC/SAB035_annotated.rds")
+rm(SAB035)
+```
