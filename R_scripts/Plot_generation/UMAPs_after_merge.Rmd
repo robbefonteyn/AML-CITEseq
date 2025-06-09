@@ -15,44 +15,6 @@ setwd("./Data")  # Update to your project-relative path
 SAB <- readRDS("SAB.rds")
 ```
 
-```{r}
-# Assign cluster majority cell type based on Triana annotation
-cluster_col <- "seurat_clusters"
-celltype_col <- "Triana_celltype"
-
-SAB@meta.data[[cluster_col]] <- as.factor(SAB@meta.data[[cluster_col]])
-SAB@meta.data[[celltype_col]] <- as.factor(SAB@meta.data[[celltype_col]])
-
-cluster_majority <- SAB@meta.data %>%
-  group_by(cluster = .data[[cluster_col]]) %>%
-  count(celltype = .data[[celltype_col]]) %>%
-  slice_max(n, n = 1, with_ties = FALSE) %>%
-  ungroup()
-
-lookup <- setNames(cluster_majority$celltype, cluster_majority$cluster)
-SAB@meta.data$Triana_cluster_majority_celltype <- lookup[as.character(SAB@meta.data[[cluster_col]])]
-```
-
-```{r}
-# Assign Azimuth predicted cell type based on majority in each cluster
-celltype_col <- "predicted.celltype.l1"
-SAB@meta.data[[celltype_col]] <- as.factor(SAB@meta.data[[celltype_col]])
-
-cluster_majority <- SAB@meta.data %>%
-  group_by(cluster = .data[[cluster_col]]) %>%
-  count(celltype = .data[[celltype_col]]) %>%
-  slice_max(n, n = 1, with_ties = FALSE) %>%
-  ungroup()
-
-lookup <- setNames(cluster_majority$celltype, cluster_majority$cluster)
-SAB@meta.data$Azimuth_cluster_majority_celltype_l1 <- lookup[as.character(SAB@meta.data[[cluster_col]])]
-```
-
-```{r}
-# Save the updated object
-saveRDS(SAB, "SAB.rds")
-```
-
 # Layer 1 Azimuth
 ```{r}
 # Create UMAP colored by Azimuth prediction
