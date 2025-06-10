@@ -10,7 +10,7 @@ library(ggplot2)
 ```{r}
 # Load the SAB
 setwd("C:/Users/Robbe Fonteyn/OneDrive - UGent/AJ 2024-2025/Master's_Dissertation/AML-CITEseq/Data")
-SAB <- readRDS("SAB_slimmed_final.rds")
+SAB <- readRDS("SAB_slimmed_final_harmony.rds")
 ```
 
 ```{r}
@@ -85,6 +85,27 @@ DimPlot(SAB, reduction = "RNA_harmony_umap", group.by = "Azimuth_cluster_majorit
 DimPlot(SAB, reduction = "RNA_harmony_umap", group.by = "Triana_cluster_majority_celltype", label = TRUE, raster = FALSE) + NoLegend()
 DimPlot(SAB, reduction = "RNA_harmony_umap", group.by = "Azimuth_cluster_majority_celltype_l2", label = TRUE, raster = FALSE)
 ```
+# Check counts specific per cluster
+```{r}
+# Settings
+cluster_col <- "RNA_harmony_clusters"
+celltype_col <- "predicted.celltype.l2"
+
+# Prepare data
+SAB@meta.data[[cluster_col]] <- as.factor(SAB@meta.data[[cluster_col]])
+SAB@meta.data[[celltype_col]] <- as.factor(SAB@meta.data[[celltype_col]])
+
+# Count cells per cluster and cell type
+cluster_counts <- SAB@meta.data %>%
+  group_by(cluster = .data[[cluster_col]]) %>%
+  count(celltype = .data[[celltype_col]]) %>%
+  ungroup()
+
+cluster_counts %>% 
+  filter(cluster == 14) %>% 
+  arrange(desc(n))
+```
+
 
 ```{r}
 #Save the Seurat object with Harmony embeddings
