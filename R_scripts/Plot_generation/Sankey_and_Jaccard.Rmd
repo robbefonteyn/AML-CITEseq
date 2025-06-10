@@ -400,10 +400,20 @@ annotation_labels <- matrix(as.character(reordered_matrix),
                             dimnames = list(rownames(confusion_matrix)[row_order],
                                             colnames(confusion_matrix)[col_order]))
 
-# Plot heatmap
-map <- pheatmap(reordered_matrix,
-         scale = "row",
-         display_numbers = annotation_labels,
+# Normalize each row to max 1 (for color scaling)
+reordered_matrix_rownorm <- t(apply(reordered_matrix, 1, function(x) x / max(x)))
+
+# Use original matrix for displaying raw counts
+annotation_labels_raw <- matrix(as.character(reordered_matrix),
+                                nrow = nrow(reordered_matrix),
+                                ncol = ncol(reordered_matrix),
+                                dimnames = list(rownames(reordered_matrix),
+                                                colnames(reordered_matrix)))
+
+# Plot
+map <- pheatmap(reordered_matrix_rownorm,
+         scale = "none",  # because we already scaled
+         display_numbers = annotation_labels_raw,  # Show raw counts in cells
          cluster_rows = FALSE,
          cluster_cols = FALSE,
          fontsize_row = 8,
