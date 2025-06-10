@@ -6,12 +6,11 @@ library(dplyr)
 library(ggplot2)
 library(ggpubr)
 library(Signac)
-
 ```
 
 ```{r}
 # Set working directory and load Seurat object
-setwd("./Data")  # Update to your project-relative path
+setwd("./Data")
 SAB <- readRDS("SAB.rds")
 ```
 
@@ -342,14 +341,22 @@ DefaultAssay(SAB) <- "RNA"
 
 # Define all markers of interest
 adt_markers <- list(
-  "CD34" = "CD34.1",
-  "CD3" = "CD3-0034",
-  "CD4" = "CD4-0045",
-  "CD8" = "CD8",
-  "CD19" = "CD19.1",
-  "CD56" = "CD56",
-  "CD36" = "CD36.1",
-  "CD71" = "CD71"
+  #"CD123" = "CD123",
+  #"CD44" = "CD44-0073",
+  #"CD47" = "CD47.1",
+  #"CD96" = "CD96.1",
+  #"CD184" = "CD184",
+  #"CD25" = "CD25",
+  #"CD371" = "CD371",
+  #"CD26" = "CD26"
+  "CD33" = "CD33.1",
+  "CD52" = "CD52.1",
+  "CD9" = "CD9.1",
+  "CD105" = "CD105",
+  "CD117" = "CD117",
+  "CD133" = "CD133-0126",
+  "CD135" = "CD135",
+  "CD274" = "CD274.1"
 )
 
 # Initialize empty plot list
@@ -411,12 +418,19 @@ for (patient in selected_patients) {
   
   patient_cells <- rownames(SAB@meta.data[SAB@meta.data$Patient == patient, ])
   
-  p <- DimPlot(SAB, reduction = "umap",
+  # Define title
+  if (patient == "HC3") {
+    plot_title <- "Healthy Control 3"
+  } else {
+    plot_title <- paste("Patient:", patient)
+  }
+  
+  p <- DimPlot(SAB, reduction = "RNA_harmony_umap",
                cells.highlight = patient_cells,
                cols.highlight = "orange",
                cols = "lightgray",
                raster = FALSE) +
-    ggtitle(paste("Patient:", patient)) +
+    ggtitle(plot_title) +
     NoLegend()
   
   selected_umap_list[[patient]] <- p
@@ -427,7 +441,7 @@ combined_selected_plot <- ggarrange(plotlist = selected_umap_list,
                                     ncol = 3,
                                     nrow = 1)
 
-ggsave("selected_patient_regular_umaps.png", combined_selected_plot, width = 12, height = 4)
+ggsave("selected_patient_umaps_Harmony.png", combined_selected_plot, width = 12, height = 4)
 ```
 
 # Clusters separate ggarrange
@@ -791,6 +805,89 @@ for (i in seq_len(total_pages)) {
     units = "in",
     dpi = 300
   )
+}
+```
+
+# Sorting ggarrange
+```{r}
+# Ensure UMAP was computed under RNA assay
+DefaultAssay(SAB) <- "RNA"
+
+# Get all unique cell types (assuming Seurat object has a cell type annotation column)
+all_celltypes <- sort(unique(na.omit(SAB@meta.data$Triana_celltype)))
+
+# Initialize list
+celltype_umap_list <- list()
+
+# Mapping of long cell type names to short names
+short_names <- list(
+  "Plasmacytoid dendritic cell progenitors" = "pDC progenitors",
+  "CD69+PD-1+ memory CD4+ T cells" = "CD69⁺PD-1⁺ CD4 Tmem",
+  "CD8+CD103+ tissue resident memory T cells" = "CD8⁺CD103⁺ Trm",
+  "Eosinophil-basophil-mast cell progenitors" = "Eo/Ba/Ma progenitors"
+)
+
+for (celltype in all_celltypes) {
+  message("Creating UMAP for cell type: ", celltype)
+
+  # Use short name if it exists in the mapping
+  display_name <- if (celltype %in% names(short_names)) short_names[[celltype]] else celltype
+
+  cells <- rownames(SAB@meta.data)[SAB@meta.data$Triana_celltype == celltype]
+
+  p <- DimPlot(
+    SAB,
+    reduction = "RNA_harmony_umap",
+    cells.highlight = list(cells),
+    cols.highlight = "purple",
+    cols = "lightgray",
+    raster = FALSE
+  ) +
+    ggtitle(display_name) +
+    theme(plot.title = element_text(size = 10)) +
+    NoLegend()
+
+  # Store with safe name
+  safe_name <- gsub("[^A-Za-z0-9_]", "_", display_name)
+  celltype_umap_list[[safe_name]] <- p
+}
+
+plots_per_page <- 15
+plots_per_row <- 3
+plots_per_col <- 5
+total_pages <- ceiling(length(celltype_umap_list) / plots_per_page)
+
+for (i in seq_len(total_pages)) {
+  start_idx <- (i - 1) * plots_per_page + 1
+  end_idx <- min(i * plots_per_page, length(celltype_umap_list))
+  plot_subset_names <- names(celltype_umap_list)[start_idx:end_idx]
+  
+  plot_subset <- lapply(plot_subset_names, function(name) {
+    celltype_umap_list[[name]] +
+      theme(plot.title = element_text(size = 10)) +
+      NoLegend()
+  })
+  
+  # Pad with empty plots if needed
+  num_missing <- plots_per_page - length(plot_subset)
+  if (num_missing > 0) {
+    empty_plot <- ggplot() + theme_void()
+    plot_subset <- c(plot_subset, rep(list(empty_plot), num_missing))
+  }
+
+  combined_plot <- ggarrange(plotlist = plot_subset,
+                             ncol = plots_per_row,
+                             nrow = plots_per_col,
+                             align = "none")
+
+  # Save to A4 size (portrait): 8.27 x 11.69 inches
+  filename <- paste0(output_dir, "/Triana_ggarrange/UMAP_Celltypes_Page_", i, "_Triana_Harmony.jpeg")
+  ggsave(filename,
+         plot = combined_plot,
+         width = 8.27,
+         height = 11.69,
+         dpi = 300,
+         units = "in")
 }
 ```
 
